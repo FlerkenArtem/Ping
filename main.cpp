@@ -1,13 +1,15 @@
-#include <iostream>
-#include <winsock2.h>
 #include <combaseapi.h>
+#include <iostream>
+#include <regex>
 #include <stack>
+#include <winsock2.h>
 // #include <thread>
 // #include <chrono>
 
 using namespace std;
 
 stack<GUID> genGuids();
+void sendStack(SOCKET sock, std::stack<GUID>& guidStack);
 
 int main()
 {
@@ -40,6 +42,39 @@ int main()
 
     cout << "Сокет успешно создан" << endl;
 
+    const std::regex ipPattern(
+        "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}"
+        "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$");
+    string ip;
+    int port;
+
+    while (true) {
+        cout << "Введите IP-адрес: ";
+        cin >> ip;
+        if (!std::regex_match(ip, ipPattern)){
+            cout << "IP-адрес введен неверно";
+            continue;
+        }
+
+        cout << "Введите порт: ";
+        if (!(cin >> port)) {
+            cout << "Порт должен быть числом" << endl;
+            continue;
+        } else if (port < 0 || port > 65535){
+            cout << "Порт введен неверно";
+            continue;
+        }
+
+        break;
+    }
+
+    sockaddr_in destAddr;
+    destAddr.sin_family = AF_INET;
+    destAddr.sin_port = htons(port);
+    destAddr.sin_addr.s_addr = inet_addr(ip.c_str());
+
+    connect(sock, (SOCKADDR*)&destAddr, sizeof(destAddr));
+
     closesocket(sock);
     WSACleanup();
     return 0;
@@ -56,3 +91,17 @@ stack<GUID> genGuids(){
     return guids;
 }
 
+void sendStack(SOCKET sock, std::stack<GUID>& guidStack){
+    while (guidStack.empty()){
+        GUID guid = guidStack.top();
+        int res = send(sock,
+                       reinterpret_cast<const char*>(&guid),
+                       sizeof(GUID),
+                       0);
+        if (res == SOCKET_ERROR){
+            cerr << "Ошибка отправки: " << WSAGetLastError() << endl;
+            break;
+        }
+        guidStack.pop();
+    }
+}

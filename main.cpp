@@ -1,9 +1,13 @@
 #include <iostream>
 #include <winsock2.h>
+#include <combaseapi.h>
+#include <stack>
 // #include <thread>
 // #include <chrono>
 
 using namespace std;
+
+stack<GUID> genGuids();
 
 int main()
 {
@@ -39,5 +43,16 @@ int main()
     closesocket(sock);
     WSACleanup();
     return 0;
+}
+
+stack<GUID> genGuids(){
+    stack<GUID> guids;
+    for (int i = 0; i < 4; i++){
+        GUID guid;
+        if (CoCreateGuid(&guid) == S_OK){
+            guids.push(guid);
+        }
+    }
+    return guids;
 }
 

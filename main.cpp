@@ -1,6 +1,7 @@
 #include <combaseapi.h>
 #include <future>
 #include <iostream>
+#include <optional>
 #include <regex>
 #include <stack>
 #include <thread>
@@ -47,13 +48,13 @@ bool compareGuidStack(stack<GUID> a, stack<GUID> b);
 unsigned short calculateChecksum(unsigned short* buffer, int size);
 
 /// Подключение сокетв
-sockaddr_in connectAddr();
+optional<sockaddr_in> connectAddr();
 
 /// Подключение сокета по IP-адресу
 sockaddr_in connectIpAddr();
 
 /// Подключение сокета по DNS-имени
-sockaddr_in connectDnsAddr();
+optional<sockaddr_in> connectDnsAddr();
 
 /// Точка входа
 int main()
@@ -69,7 +70,11 @@ int main()
         return 1;
     }
 
-    sockaddr_in destAddr = connectAddr();
+    optional<sockaddr_in> destAddr = connectAddr();
+    if (destAddr == nullopt){
+        cerr << "Ошибка подключения к адресу" << endl;
+        return 1;
+    }
 
     stack<GUID> guids = genGuids();
 
@@ -177,8 +182,8 @@ SOCKET createSocket() {
     return sock;
 }
 
-sockaddr_in connectAddr() {
-    sockaddr_in conn;
+optional<sockaddr_in> connectAddr() {
+    optional<sockaddr_in> conn;
     int type = 0;
     while (type != 1 && type != 2) {
         cout << "Выберите тип соединения: " << endl;
@@ -223,15 +228,12 @@ sockaddr_in connectIpAddr() {
     return destAddr;
 }
 
-sockaddr_in connectDnsAddr() {
+optional<sockaddr_in> connectDnsAddr() {
     string hostname;
     sockaddr_in destAddr;
 
-    while (true) {
-        cout << "Введите DNS-имя: ";
-        cin >> hostname;
-        break;
-    }
+    cout << "Введите DNS-имя: ";
+    cin >> hostname;
 
     struct addrinfo hints;
     struct addrinfo* result = nullptr;
@@ -244,7 +246,7 @@ sockaddr_in connectDnsAddr() {
     int dnsResult = getaddrinfo(hostname.c_str(), nullptr, &hints, &result);
     if (dnsResult != 0) {
         cerr << "Ошибка разрешения DNS: " << dnsResult << endl;
-        return destAddr;
+        return nullopt;
     }
 
     if (result != nullptr && result->ai_addr != nullptr) {

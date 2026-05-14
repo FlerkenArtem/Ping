@@ -95,6 +95,7 @@ int main()
 }
 
 stack<GUID> genGuids() {
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     stack<GUID> guids;
     for (int i = 0; i < 4; i++){
         GUID guid;
@@ -102,6 +103,7 @@ stack<GUID> genGuids() {
             guids.push(guid);
         }
     }
+    CoUninitialize();
     return guids;
 }
 

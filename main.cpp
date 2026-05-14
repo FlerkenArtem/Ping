@@ -17,19 +17,25 @@ struct icmpHeader {
     unsigned short sequence;
 };
 
+struct packetData
+{
+    unsigned long long sendTime;
+    GUID data;
+};
+
 struct icmpPacket {
     icmpHeader header;
-    GUID data;
+    packetData data;
 };
 
 /// Генерация стека GUID для отправки
 stack<GUID> genGuids();
 
 /// Создание сокета
-int createSocket();
+SOCKET createSocket();
 
 /// Отправка стека GUID
-void sendStack(SOCKET sock, sockaddr_in destAddr, std::stack<GUID> guidStack);
+void sendStack(SOCKET sock, sockaddr_in destAddr, stack<GUID> guidStack);
 
 /// Прием стека GUID
 stack<GUID> recvStack(SOCKET sock);
@@ -58,8 +64,8 @@ int main()
     cout << "PING";
 
     SOCKET sock = createSocket();
-    if (sock == 1) {
-        cerr << "Ошибка создания сокета";
+    if (sock == (unsigned long long)SOCKET_ERROR || sock == INVALID_SOCKET) {
+        cerr << "Ошибка создания сокета" << sock << endl;
         return 1;
     }
 
@@ -121,7 +127,7 @@ bool compareGuidStack(stack<GUID> a, stack<GUID> b) {
     return true;
 }
 
-int createSocket() {
+SOCKET createSocket() {
     WORD wVersionRequested;
     WSADATA wsaData;
     int err;
@@ -146,7 +152,7 @@ int createSocket() {
     if (sock == INVALID_SOCKET) {
         cerr << "Ошибка создания сокета: " << WSAGetLastError() << endl;
         WSACleanup();
-        return 1;
+        return INVALID_SOCKET;
     }
 
     sockaddr_in localAddr;
@@ -162,7 +168,7 @@ int createSocket() {
         closesocket(sock);
         WSACleanup();
 
-        return 1;
+        return SOCKET_ERROR;
     }
 
     cout << "Сокет успешно создан и привязан к интерфейсу" << endl;
@@ -192,7 +198,7 @@ sockaddr_in connectAddr() {
 }
 
 sockaddr_in connectIpAddr() {
-    const std::regex ipPattern(
+    const regex ipPattern(
         "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}"
         "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$");
     string ip;
@@ -200,7 +206,7 @@ sockaddr_in connectIpAddr() {
     while (true) {
         cout << "Введите IP-адрес: ";
         cin >> ip;
-        if (!std::regex_match(ip, ipPattern)){
+        if (!regex_match(ip, ipPattern)){
             cout << "IP-адрес введен неверно";
             continue;
         }
@@ -247,7 +253,7 @@ sockaddr_in connectDnsAddr() {
     return destAddr;
 }
 
-void sendStack(SOCKET sock, sockaddr_in destAddr, std::stack<GUID> guidStack) {
+void sendStack(SOCKET sock, sockaddr_in destAddr, stack<GUID> guidStack) {
     unsigned short sequenseNumber = 0;
     unsigned short processId = static_cast<unsigned short>(GetCurrentProcessId());
 
@@ -258,8 +264,10 @@ void sendStack(SOCKET sock, sockaddr_in destAddr, std::stack<GUID> guidStack) {
         pac.header.checkSum = 0;
         pac.header.id = processId;
         pac.header.sequence = htons(sequenseNumber++);
-        pac.data = guidStack.top();
+        pac.data.data = guidStack.top();
 
+        chrono::time_point now = chrono::high_resolution_clock::now();
+        pac.data.sendTime = chrono::duration_cast<chrono::microseconds>(now.time_since_epoch()).count();
         pac.header.checkSum = calculateChecksum(reinterpret_cast<unsigned short*>(&pac),
                                                 sizeof(pac));
 
@@ -278,7 +286,7 @@ void sendStack(SOCKET sock, sockaddr_in destAddr, std::stack<GUID> guidStack) {
         guidStack.pop();
 
         if (!guidStack.empty()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            this_thread::sleep_for(chrono::milliseconds(1000));
         }
     }
 }
@@ -291,6 +299,8 @@ stack<GUID> recvStack(SOCKET sock) {
         cerr << "Не удалось установить таймаут: " << WSAGetLastError() << endl;
         return recvedGuids;
     }
+
+
     const int bufferSize = 20 + sizeof(icmpPacket);
     char* recvBuffer = new char[bufferSize];
     unsigned short processId = static_cast<unsigned short>(GetCurrentProcessId());
@@ -305,6 +315,7 @@ stack<GUID> recvStack(SOCKET sock) {
                                    0,
                                    reinterpret_cast<SOCKADDR*>(&fromAddr),
                                    &fromLen);
+        chrono::time_point recvTimePoint = chrono::high_resolution_clock::now();
 
         if (bytesRecved > 0) {
             int ipHeaderLen = (recvBuffer[0] & 0x0F) * 4;
@@ -313,16 +324,21 @@ stack<GUID> recvStack(SOCKET sock) {
                 icmpPacket* pac = reinterpret_cast<icmpPacket*>(recvBuffer + ipHeaderLen);
 
                 if (pac->header.type == 0 && pac->header.id == processId) {
-                    cout << "Успешное получение" << endl;
-                    recvedGuids.push(pac->data);
-                } else {
-                    continue;
+
+                    chrono::microseconds sendDuration(pac->data.sendTime);
+                    chrono::high_resolution_clock::time_point sendTimePoint =
+                        chrono::high_resolution_clock::time_point() + sendDuration;
+
+                    chrono::duration<double, milli> diff = recvTimePoint - sendTimePoint;
+
+                    cout << "Успешное получение (" << diff.count() << " мс)" << endl;
+                    recvedGuids.push(pac->data.data);
                 }
             }
         } else {
             int errorCode = WSAGetLastError();
             if (errorCode == WSAETIMEDOUT) {
-                cerr << "Истекли 3 секунды ожидания " << endl;
+                cerr << "Истекли 3 секунды ожидания пакета" << endl;
             } else if (errorCode != WSAESHUTDOWN && errorCode != WSAECONNRESET) {
                 cerr << "Ошибка получения: " << errorCode << endl;
             }

@@ -80,7 +80,7 @@ int main()
 
     future<stack<GUID>> recvFuture = async(launch::async, recvStack, sock);
 
-    thread sendThread(sendStack, sock, destAddr, guids);
+    thread sendThread(sendStack, sock, *destAddr, guids);
 
     if (sendThread.joinable()) {
         sendThread.join();

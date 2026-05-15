@@ -1,12 +1,12 @@
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <combaseapi.h>
 #include <future>
 #include <iostream>
 #include <optional>
 #include <regex>
-#include <stack>
+#include <vector>
 #include <thread>
-#include <winsock2.h>
-#include <ws2tcpip.h>
 
 using namespace std;
 
@@ -31,25 +31,26 @@ struct icmpPacket
     packetData data;
 };
 
-/// Генерация стека GUID для отправки
-stack<GUID> genGuids();
+/// Генерация вектора GUID для отправки
+vector<GUID> genGuids();
 
 /// Создание сокета
 SOCKET createSocket();
 
-/// Отправка стека GUID
-void sendStack(SOCKET sock, sockaddr_in destAddr, stack<GUID> guidStack);
+/// Отправка вектора GUID
+void sendVector(SOCKET sock, sockaddr_in destAddr, vector<GUID> guidVector);
 
-/// Прием стека GUID
-stack<GUID> recvStack(SOCKET sock);
+/// Прием вектора GUID
+vector<GUID> recvVector(SOCKET sock);
 
-/// Сравнение стеков GUID
-bool compareGuidStack(stack<GUID> a, stack<GUID> b);
+/// Сравнение векторов GUID
+bool compareGuidVector(const vector<GUID>& a, const vector<GUID>& b);
+
 
 /// Вычисление контрольной суммы
 unsigned short calculateChecksum(unsigned short *buffer, int size);
 
-/// Подключение сокетв
+/// Подключение сокета
 optional<sockaddr_in> connectAddr();
 
 /// Подключение сокета по IP-адресу
@@ -78,19 +79,19 @@ int main()
         return 1;
     }
 
-    stack<GUID> guids = genGuids();
+    vector<GUID> guids = genGuids();
 
-    future<stack<GUID>> recvFuture = async(launch::async, recvStack, sock);
+    future<vector<GUID>> recvFuture = async(launch::async, recvVector, sock);
 
-    thread sendThread(sendStack, sock, *destAddr, guids);
+    thread sendThread(sendVector, sock, *destAddr, guids);
 
     if (sendThread.joinable()) {
         sendThread.join();
     }
 
-    stack<GUID> recvedGuids = recvFuture.get();
+    vector<GUID> recvedGuids = recvFuture.get();
 
-    if (compareGuidStack(guids, recvedGuids)) {
+    if (compareGuidVector(guids, recvedGuids)) {
         cout << "Успех" << endl;
     } else {
         cout << "Ошибка" << endl;
@@ -101,15 +102,15 @@ int main()
     return 0;
 }
 
-stack<GUID> genGuids()
+vector<GUID> genGuids()
 {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    stack<GUID> guids;
+    vector<GUID> guids;
 
     for (int i = 0; i < 4; i++) {
         GUID guid;
         if (CoCreateGuid(&guid) == S_OK) {
-            guids.push(guid);
+            guids.push_back(guid);
         }
     }
 
@@ -117,27 +118,14 @@ stack<GUID> genGuids()
     return guids;
 }
 
-bool compareGuidStack(stack<GUID> a, stack<GUID> b)
+bool compareGuidVector(const vector<GUID>& a, const vector<GUID>& b)
 {
     if (a.size() != b.size()) {
         return false;
     }
-
-    stack<GUID> invertedB;
-    while (!b.empty()) {
-        invertedB.push(b.top());
-        b.pop();
-    }
-
-    while (!a.empty() && !invertedB.empty()) {
-        if (!IsEqualGUID(a.top(), invertedB.top())) {
-            return false;
-        }
-        a.pop();
-        invertedB.pop();
-    }
-
-    return true;
+    return equal(a.begin(), a.end(), b.begin(), [](const GUID &g1, const GUID &g2) {
+        return IsEqualGUID(g1, g2) != 0;
+    });
 }
 
 SOCKET createSocket()
@@ -222,7 +210,7 @@ sockaddr_in connectIpAddr()
         cout << "Введите IP-адрес: ";
         cin >> ip;
         if (!regex_match(ip, ipPattern)) {
-            cout << "IP-адрес введен неверно";
+            cout << "IP-адрес введен неверно" << endl;
             continue;
         }
         break;
@@ -266,53 +254,44 @@ optional<sockaddr_in> connectDnsAddr()
     return destAddr;
 }
 
-void sendStack(SOCKET sock, sockaddr_in destAddr, stack<GUID> guidStack)
+void sendVector(SOCKET sock, sockaddr_in destAddr, vector<GUID> guidVector)
 {
-    unsigned short sequenseNumber = 0;
-    unsigned short processId = static_cast<unsigned short>(GetCurrentProcessId());
+    {
+        unsigned short sequenseNumber = 0;
+        unsigned short processId = static_cast<unsigned short>(GetCurrentProcessId());
 
-    while (!guidStack.empty()) {
-        icmpPacket pac;
-        pac.header.type = 8; // Эхо-запрос
-        pac.header.code = 0; // Эхо-запрос
-        pac.header.checkSum = 0;
-        pac.header.id = processId;
-        pac.header.sequence = htons(sequenseNumber++);
-        pac.data.data = guidStack.top();
+        for (unsigned int i = 0; i < guidVector.size(); i++) {
+            icmpPacket pac;
+            pac.header.type = 8;
+            pac.header.code = 0;
+            pac.header.checkSum = 0;
+            pac.header.id = processId;
+            pac.header.sequence = htons(sequenseNumber++);
+            pac.data.data = guidVector[i];
 
-        // текущее время
-        chrono::time_point now = chrono::high_resolution_clock::now();
-        pac.data.sendTime = chrono::duration_cast<chrono::microseconds>(now.time_since_epoch())
-                                .count(); // вычисление времени отпраки
+            chrono::time_point now = chrono::high_resolution_clock::now();
+            pac.data.sendTime = chrono::duration_cast<chrono::microseconds>(now.time_since_epoch()).count();
 
-        // вычисление контрольной суммы
-        pac.header.checkSum = calculateChecksum(reinterpret_cast<unsigned short *>(&pac),
-                                                sizeof(pac));
+            pac.header.checkSum = calculateChecksum(reinterpret_cast<unsigned short *>(&pac), sizeof(pac));
 
-        int res = sendto(sock,                                 // сокет
-                         reinterpret_cast<const char *>(&pac), // указатель на буфер с данными
-                         sizeof(pac),                          // размер данных в буфере
-                         0,                                    // флаги
-                         reinterpret_cast<SOCKADDR *>(
-                             &destAddr),    // указатель на структуру, содержащую адрес получателя
-                         sizeof(destAddr)); // размер структуры адреса получателя
-        if (res == SOCKET_ERROR) {
-            cerr << "Ошибка отправки: " << WSAGetLastError() << endl;
-            break;
-        }
-        cout << "Пакет отправлен." << endl;
+            int res = sendto(sock, reinterpret_cast<const char *>(&pac), sizeof(pac), 0,
+                             reinterpret_cast<SOCKADDR *>(&destAddr), sizeof(destAddr));
+            if (res == SOCKET_ERROR) {
+                cerr << "Ошибка отправки: " << WSAGetLastError() << endl;
+                break;
+            }
+            cout << "Пакет отправлен." << endl;
 
-        guidStack.pop();
-
-        if (!guidStack.empty()) {
-            this_thread::sleep_for(chrono::milliseconds(1000)); // задержка в 1 с
+            if (i < guidVector.size() - 1) {
+                this_thread::sleep_for(chrono::milliseconds(1000));
+            }
         }
     }
 }
 
-stack<GUID> recvStack(SOCKET sock)
+vector<GUID> recvVector(SOCKET sock)
 {
-    stack<GUID> recvedGuids;
+    vector<GUID> recvedGuids;
 
     DWORD timeout = 3000;       // таймаут ожидания 3 с
     if (setsockopt(sock,        // сокет
@@ -337,16 +316,13 @@ stack<GUID> recvStack(SOCKET sock)
         sockaddr_in fromAddr;
         int fromLen = sizeof(fromAddr);
 
-        int bytesRecved = recvfrom(sock, // сокет
-
+        int bytesRecved = recvfrom(sock,       // сокет
                                    recvBuffer, // указатель на буфер для приема данных
                                    bufferSize, // размер буфера
                                    0,          // флаги
-
                                    reinterpret_cast<SOCKADDR *>(
                                        &fromAddr), // указатель на адрес источника
-
-                                   &fromLen); // указатель на длину структуры адреса источнка
+                                   &fromLen);      // указатель на длину структуры адреса источнка
 
         // Вычисление времени получения
         chrono::time_point recvTimePoint = chrono::high_resolution_clock::now();
@@ -368,7 +344,7 @@ stack<GUID> recvStack(SOCKET sock)
                     chrono::duration<double, milli> diff = recvTimePoint - sendTimePoint;
 
                     cout << "Успешное получение (" << diff.count() << " мс)" << endl;
-                    recvedGuids.push(pac->data.data);
+                    recvedGuids.push_back(pac->data.data);
                 }
             }
         } else {

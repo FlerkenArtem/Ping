@@ -24,7 +24,7 @@ optional<sockaddr_in> connectDnsAddr();
 unsigned long long ping(sockaddr_in destAddr);
 
 /// Условие завершения
-bool endPing(map<int, bool> recved, map <int, bool> sended);
+bool endPing(map<int, bool> recved, map<int, bool> sended);
 
 /// Расчет контрольной суммы
 unsigned short calculateChecksum(unsigned short *buffer, int size);
@@ -39,7 +39,6 @@ int main()
         cerr << "Ошибка инициализации Winsock: " << wsaStartupResult << endl;
         return 1;
     }
-
 
     cout << "PING" << endl;
 
@@ -287,7 +286,8 @@ unsigned long long ping(sockaddr_in destAddr)
             delete[] recvBuffer;
             recved[i] = true;
             i++;
-            if (endPing(recved, sended)) break;
+            if (endPing(recved, sended))
+                break;
             continue;
 
         } else {
@@ -295,7 +295,8 @@ unsigned long long ping(sockaddr_in destAddr)
             delete[] recvBuffer;
             recved[i] = true;
             i++;
-            if (endPing(recved, sended)) break;
+            if (endPing(recved, sended))
+                break;
             continue;
         }
 
@@ -400,15 +401,15 @@ unsigned long long ping(sockaddr_in destAddr)
             recved[i] = true;
         }
 
-
-        /// Очистка памяти
+        // Очистка памяти
         delete[] recvBuffer;
 
-        if (endPing(recved, sended)) break;
+        if (endPing(recved, sended))
+            break;
 
         i++;
 
-        /// Задержка
+        // Задержка
         this_thread::sleep_for(chrono::milliseconds(1000));
     }
 
@@ -430,7 +431,7 @@ unsigned short calculateChecksum(unsigned short *buffer, int size)
     return static_cast<unsigned short>(~cksum);
 }
 
-bool endPing(map<int, bool> recved, map <int, bool> sended)
+bool endPing(map<int, bool> recved, map<int, bool> sended)
 {
     /// Проверка условий завершения
     bool allSendedTrue = all_of(sended.begin(), sended.end(), [](const pair<int, bool> &pair) {

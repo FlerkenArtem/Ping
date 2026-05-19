@@ -23,6 +23,9 @@ optional<sockaddr_in> connectDnsAddr();
 /// Выполнение Ping
 unsigned long long ping(sockaddr_in destAddr);
 
+/// Условие завершения
+bool endPing(map<int, bool> recved, map <int, bool> sended);
+
 /// Расчет контрольной суммы
 unsigned short calculateChecksum(unsigned short *buffer, int size);
 
@@ -241,7 +244,7 @@ unsigned long long ping(sockaddr_in destAddr)
         // Обработка ошибок отправки
         if (res == SOCKET_ERROR) {
             cerr << "Ошибка отправки: " << WSAGetLastError() << endl;
-            continue;
+            sended[i] = true;
         } else {
             cout << "Пакет отправлен." << endl;
             sended[i] = true;
@@ -282,10 +285,17 @@ unsigned long long ping(sockaddr_in destAddr)
         } else if (selectRes == 0) {
             cerr << "Превышен интервал ожидания запроса." << endl;
             delete[] recvBuffer;
+            recved[i] = true;
+            i++;
+            if (endPing(recved, sended)) break;
             continue;
+
         } else {
             cerr << "Ошибка select: " << WSAGetLastError() << endl;
             delete[] recvBuffer;
+            recved[i] = true;
+            i++;
+            if (endPing(recved, sended)) break;
             continue;
         }
 
@@ -390,23 +400,13 @@ unsigned long long ping(sockaddr_in destAddr)
             recved[i] = true;
         }
 
-        /// Проверка условий завершения
-        bool allSendedTrue = all_of(sended.begin(), sended.end(), [](const pair<int, bool> &pair) {
-            return pair.second == true;
-        });
-        bool allRecvedTrue = all_of(recved.begin(), recved.end(), [](const pair<int, bool> &pair) {
-            return pair.second == true;
-        });
 
         /// Очистка памяти
         delete[] recvBuffer;
 
-        /// Завершение
-        if (allSendedTrue && allRecvedTrue) {
-            break;
-        } else if (recved[i] == true && sended[i == true]) {
-            i++;
-        }
+        if (endPing(recved, sended)) break;
+
+        i++;
 
         /// Задержка
         this_thread::sleep_for(chrono::milliseconds(1000));
@@ -428,4 +428,22 @@ unsigned short calculateChecksum(unsigned short *buffer, int size)
     cksum = (cksum >> 16) + (cksum & 0xffff);
     cksum += (cksum >> 16);
     return static_cast<unsigned short>(~cksum);
+}
+
+bool endPing(map<int, bool> recved, map <int, bool> sended)
+{
+    /// Проверка условий завершения
+    bool allSendedTrue = all_of(sended.begin(), sended.end(), [](const pair<int, bool> &pair) {
+        return pair.second == true;
+    });
+    bool allRecvedTrue = all_of(recved.begin(), recved.end(), [](const pair<int, bool> &pair) {
+        return pair.second == true;
+    });
+
+    /// Завершение
+    if (allSendedTrue && allRecvedTrue) {
+        return true;
+    } else {
+        return false;
+    }
 }

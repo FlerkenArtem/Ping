@@ -1,54 +1,15 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <algorithm>
 #include <combaseapi.h>
-#include <future>
 #include <iostream>
+#include <map>
 #include <optional>
 #include <regex>
-#include <vector>
 #include <thread>
 
 using namespace std;
-
-struct icmpHeader
-{
-    unsigned char type;
-    unsigned char code;
-    unsigned short checkSum;
-    unsigned short id;
-    unsigned short sequence;
-};
-
-struct packetData
-{
-    unsigned long long sendTime;
-    GUID data;
-};
-
-struct icmpPacket
-{
-    icmpHeader header;
-    packetData data;
-};
-
-/// Генерация вектора GUID для отправки
-vector<GUID> genGuids();
-
-/// Создание сокета
-SOCKET createSocket();
-
-/// Отправка вектора GUID
-void sendVector(SOCKET sock, sockaddr_in destAddr, vector<GUID> guidVector);
-
-/// Прием вектора GUID
-vector<GUID> recvVector(SOCKET sock);
-
-/// Сравнение векторов GUID
-bool compareGuidVector(const vector<GUID>& a, const vector<GUID>& b);
-
-
-/// Вычисление контрольной суммы
-unsigned short calculateChecksum(unsigned short *buffer, int size);
+using namespace std::chrono;
 
 /// Подключение сокета
 optional<sockaddr_in> connectAddr();
@@ -59,19 +20,25 @@ sockaddr_in connectIpAddr();
 /// Подключение сокета по DNS-имени
 optional<sockaddr_in> connectDnsAddr();
 
-/// Точка входа
+/// Выполнение Ping
+unsigned long long ping(sockaddr_in destAddr);
+
+/// Расчет контрольной суммы
+unsigned short calculateChecksum(unsigned short *buffer, int size);
+
 int main()
 {
     system("chcp 65001");
     setlocale(LC_ALL, ".UTF8");
-
-    cout << "PING";
-
-    SOCKET sock = createSocket();
-    if (sock == (unsigned long long) SOCKET_ERROR || sock == INVALID_SOCKET) {
-        cerr << "Ошибка создания сокета" << sock << endl;
+    WSADATA wsaData;
+    int wsaStartupResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+    if (wsaStartupResult != 0) {
+        cerr << "Ошибка инициализации Winsock: " << wsaStartupResult << endl;
         return 1;
     }
+
+
+    cout << "PING" << endl;
 
     optional<sockaddr_in> destAddr = connectAddr();
     if (destAddr == nullopt) {
@@ -79,99 +46,10 @@ int main()
         return 1;
     }
 
-    vector<GUID> guids = genGuids();
+    ping(*destAddr);
 
-    future<vector<GUID>> recvFuture = async(launch::async, recvVector, sock);
-
-    thread sendThread(sendVector, sock, *destAddr, guids);
-
-    if (sendThread.joinable()) {
-        sendThread.join();
-    }
-
-    vector<GUID> recvedGuids = recvFuture.get();
-
-    if (compareGuidVector(guids, recvedGuids)) {
-        cout << "Успех" << endl;
-    } else {
-        cout << "Ошибка" << endl;
-    }
-
-    closesocket(sock);
     WSACleanup();
     return 0;
-}
-
-vector<GUID> genGuids()
-{
-    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    vector<GUID> guids;
-
-    for (int i = 0; i < 4; i++) {
-        GUID guid;
-        if (CoCreateGuid(&guid) == S_OK) {
-            guids.push_back(guid);
-        }
-    }
-
-    CoUninitialize();
-    return guids;
-}
-
-bool compareGuidVector(const vector<GUID>& a, const vector<GUID>& b)
-{
-    if (a.size() != b.size()) {
-        return false;
-    }
-    return equal(a.begin(), a.end(), b.begin(), [](const GUID &g1, const GUID &g2) {
-        return IsEqualGUID(g1, g2) != 0;
-    });
-}
-
-SOCKET createSocket()
-{
-    WORD wVersionRequested;
-    WSADATA wsaData;
-    int err;
-
-    wVersionRequested = MAKEWORD(2, 2);
-
-    err = WSAStartup(wVersionRequested, &wsaData);
-    if (err != 0) {
-        cout << "Ошибка инициализации WSAStartup: " << err << endl;
-        return 1;
-    }
-
-    if (LOBYTE(wsaData.wVersion) != 2 || HIBYTE(wsaData.wVersion) != 2) {
-        cout << "Не найдена нужная версия Winsock" << endl;
-        WSACleanup();
-        return 1;
-    } else
-        cout << "Winsock 2.2 dll успешно найден" << endl;
-
-    SOCKET sock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
-    if (sock == INVALID_SOCKET) {
-        cerr << "Ошибка создания сокета: " << WSAGetLastError() << endl;
-        WSACleanup();
-        return INVALID_SOCKET;
-    }
-
-    sockaddr_in localAddr;
-    localAddr.sin_family = AF_INET;
-    localAddr.sin_port = 0;
-    localAddr.sin_addr.s_addr = INADDR_ANY;
-
-    if (::bind(sock, (SOCKADDR *) &localAddr, sizeof(localAddr)) == SOCKET_ERROR) {
-        cerr << "Ошибка bind для SOCK_RAW: " << WSAGetLastError() << endl;
-
-        closesocket(sock);
-        WSACleanup();
-
-        return SOCKET_ERROR;
-    }
-
-    cout << "Сокет успешно создан и привязан к интерфейсу" << endl;
-    return sock;
 }
 
 optional<sockaddr_in> connectAddr()
@@ -254,112 +132,287 @@ optional<sockaddr_in> connectDnsAddr()
     return destAddr;
 }
 
-void sendVector(SOCKET sock, sockaddr_in destAddr, vector<GUID> guidVector)
+unsigned long long ping(sockaddr_in destAddr)
 {
+    /// Заголовок ICMP
+    struct icmpHeader
     {
-        unsigned short sequenseNumber = 0;
-        unsigned short processId = static_cast<unsigned short>(GetCurrentProcessId());
+        unsigned char type;
+        unsigned char code;
+        unsigned short checkSum;
+    };
 
-        for (unsigned int i = 0; i < guidVector.size(); i++) {
-            icmpPacket pac;
-            pac.header.type = 8;
-            pac.header.code = 0;
-            pac.header.checkSum = 0;
-            pac.header.id = processId;
-            pac.header.sequence = htons(sequenseNumber++);
-            pac.data.data = guidVector[i];
+    /// ICMP-пакет
+    struct icmpPacket
+    {
+        icmpHeader header;
+        GUID data;
+    };
 
-            chrono::time_point now = chrono::high_resolution_clock::now();
-            pac.data.sendTime = chrono::duration_cast<chrono::microseconds>(now.time_since_epoch()).count();
+    /// Создание сокета
+    SOCKET sock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+    if (sock == INVALID_SOCKET) {
+        cerr << "Ошибка создания сокета: " << WSAGetLastError() << endl;
+        WSACleanup();
+        return INVALID_SOCKET;
+    }
 
-            pac.header.checkSum = calculateChecksum(reinterpret_cast<unsigned short *>(&pac), sizeof(pac));
+    /// Перевод сокета в неблокирующий режим
+    unsigned long mode = 1;
+    ioctlsocket(sock, FIONBIO, &mode);
 
-            int res = sendto(sock, reinterpret_cast<const char *>(&pac), sizeof(pac), 0,
-                             reinterpret_cast<SOCKADDR *>(&destAddr), sizeof(destAddr));
-            if (res == SOCKET_ERROR) {
-                cerr << "Ошибка отправки: " << WSAGetLastError() << endl;
-                break;
-            }
-            cout << "Пакет отправлен." << endl;
+    sockaddr_in localAddr;
+    localAddr.sin_family = AF_INET;
+    localAddr.sin_port = 0;
+    localAddr.sin_addr.s_addr = INADDR_ANY;
 
-            if (i < guidVector.size() - 1) {
-                this_thread::sleep_for(chrono::milliseconds(1000));
-            }
+    if (bind(sock, (SOCKADDR *) &localAddr, sizeof(localAddr)) == SOCKET_ERROR) {
+        cerr << "Ошибка bind для SOCK_RAW: " << WSAGetLastError() << endl;
+        closesocket(sock);
+        WSACleanup();
+        return SOCKET_ERROR;
+    }
+
+    /// Создание словарей
+    /// Ключ - целое число, служит для связи GUID и его состояний
+    map<int, bool> sended;
+    map<int, bool> recved;
+    map<int, GUID> guids;
+
+    /// Начальное заполнение словарей
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    for (int i = 0; i < 4; i++) {
+        GUID guid;
+        sended[i] = false;
+        recved[i] = false;
+        if (CoCreateGuid(&guid) == S_OK) {
+            guids[i] = guid;
+        } else {
+            cerr << "Ошибка генерации GUID";
+            return 1;
         }
     }
-}
+    CoUninitialize();
 
-vector<GUID> recvVector(SOCKET sock)
-{
-    vector<GUID> recvedGuids;
+    int i = 0;
 
-    DWORD timeout = 3000;       // таймаут ожидания 3 с
-    if (setsockopt(sock,        // сокет
-                   SOL_SOCKET,  // уровень сокета
-                   SO_RCVTIMEO, // опция таймаута сокета
-                   reinterpret_cast<const char *>(
-                       &timeout),   // указатель на буфер, содержащий значение таймаута
-                   sizeof(timeout)) // размер буфера
-        == SOCKET_ERROR) {
-        cerr << "Не удалось установить таймаут: " << WSAGetLastError() << endl;
-        return recvedGuids;
-    }
+    /// Цикл отправки и приема пакетов
+    while (true) {
+        // Объявление пары GUID для сравнения
+        GUID origGuid = guids[i];
+        GUID recvedGuid;
 
-    const int bufferSize = 20 + sizeof(icmpPacket);
-    // 20 байт - IP-заголовок
+        // Формирование пакета на отправку
+        icmpPacket sendPack;
+        sendPack.header.type = 8;
+        sendPack.header.code = 0;
+        sendPack.header.checkSum = 0;
+        sendPack.data = origGuid;
+        sendPack.header.checkSum = calculateChecksum(reinterpret_cast<unsigned short *>(&sendPack),
+                                                     sizeof(sendPack));
 
-    char *recvBuffer = new char[bufferSize];
-    unsigned short processId = static_cast<unsigned short>(GetCurrentProcessId());
+        // Таймаут отправки
+        DWORD sendTimeout = 1000;
 
-    while (recvedGuids.size() < 4) {
-        // генерация адреса источника
-        sockaddr_in fromAddr;
-        int fromLen = sizeof(fromAddr);
+        // Установка таймаута отправки
+        if (setsockopt(sock,        // сокет
+                       SOL_SOCKET,  // уровень сокета
+                       SO_SNDTIMEO, // опция таймаута сокета
+                       reinterpret_cast<const char *>(
+                           &sendTimeout),   // указатель на буфер, содержащий значение таймаута
+                       sizeof(sendTimeout)) // размер буфера
+            == SOCKET_ERROR) {
+            cerr << "Не удалось установить таймаут на отправку: " << WSAGetLastError() << endl;
+            continue;
+        }
 
-        int bytesRecved = recvfrom(sock,       // сокет
+        // Сохранение времени начала
+        auto start = high_resolution_clock::now();
+
+        // Отправка
+        int res = sendto(sock,
+                         reinterpret_cast<const char *>(&sendPack),
+                         sizeof(sendPack),
+                         0,
+                         reinterpret_cast<SOCKADDR *>(&destAddr),
+                         sizeof(destAddr));
+        sended[i] = true;
+
+        // Обработка ошибок отправки
+        if (res == SOCKET_ERROR) {
+            cerr << "Ошибка отправки: " << WSAGetLastError() << endl;
+            continue;
+        } else {
+            cout << "Пакет отправлен." << endl;
+            sended[i] = true;
+        }
+
+        // Установка размера буфера: IPv4-заголовок (20) + ICMP-пакет
+        const int bufferSize = 20 + sizeof(icmpPacket);
+
+        // Создание буфера
+        char *recvBuffer = new char[bufferSize];
+
+        // Длина адреса
+        int addrLen = sizeof(destAddr);
+
+        // Структура fd_set для хранения сокетов
+        fd_set fdSet;
+        FD_ZERO(&fdSet);      // Очистка
+        FD_SET(sock, &fdSet); // Добавление сокета в набор
+
+        // Таймаут получения
+        timeval recvTimeout;
+        recvTimeout.tv_sec = 3;  // с
+        recvTimeout.tv_usec = 0; // мкс
+
+        // Установка таймаута с помощью select
+        int selectRes = select(0, &fdSet, NULL, NULL, &recvTimeout);
+
+        int bytesRecved;
+
+        if (selectRes > 0) {
+            bytesRecved = recvfrom(sock,       // сокет
                                    recvBuffer, // указатель на буфер для приема данных
                                    bufferSize, // размер буфера
                                    0,          // флаги
                                    reinterpret_cast<SOCKADDR *>(
-                                       &fromAddr), // указатель на адрес источника
-                                   &fromLen);      // указатель на длину структуры адреса источнка
+                                       &destAddr), // указатель на адрес источника
+                                   &addrLen);      // указатель на длину структуры адреса источнка
+        } else if (selectRes == 0) {
+            cerr << "Превышен интервал ожидания запроса." << endl;
+            delete[] recvBuffer;
+            continue;
+        } else {
+            cerr << "Ошибка select: " << WSAGetLastError() << endl;
+            delete[] recvBuffer;
+            continue;
+        }
 
-        // Вычисление времени получения
-        chrono::time_point recvTimePoint = chrono::high_resolution_clock::now();
+        // Время принятия пакета
+        auto end = high_resolution_clock::now();
+
+        // Разница
+        duration<double, milli> diff = end - start;
 
         if (bytesRecved > 0) {
             int ipHeaderLen = (recvBuffer[0] & 0x0F) * 4; // Вычисление длины IPv4 заголовка
 
-            // корректный результат: получен заголовок IPv4 + длина пакета ICMP
-            if (bytesRecved >= ipHeaderLen + static_cast<int>(sizeof(icmpPacket))) {
-                icmpPacket *pac = reinterpret_cast<icmpPacket *>(recvBuffer + ipHeaderLen);
+            icmpPacket *recvPack = reinterpret_cast<icmpPacket *>(recvBuffer + ipHeaderLen);
 
-                if (pac->header.type == 0          // эхо ответ
-                    && pac->header.id == processId // ID процесса совпадает с заданным
-                    ) {
-                    // вычисление задержки
-                    chrono::microseconds sendDuration(pac->data.sendTime);
-                    chrono::high_resolution_clock::time_point sendTimePoint
-                        = chrono::high_resolution_clock::time_point() + sendDuration;
-                    chrono::duration<double, milli> diff = recvTimePoint - sendTimePoint;
+            // Эхо-ответ
+            if (recvPack->header.type == 0 && recvPack->header.code == 0) {
+                // Получение GUID из ответа
+                recvedGuid = recvPack->data;
 
+                // Сравнение оригинального и полученного GUID
+                if (IsEqualGUID(recvedGuid, origGuid)) {
                     cout << "Успешное получение (" << diff.count() << " мс)" << endl;
-                    recvedGuids.push_back(pac->data.data);
+                } else {
+                    cerr << "Получен чужой пакет";
                 }
             }
-        } else {
-            int errorCode = WSAGetLastError();
-            if (errorCode == WSAETIMEDOUT) {
-                cerr << "Истекли 3 секунды ожидания пакета" << endl;
-            } else if (errorCode != WSAESHUTDOWN && errorCode != WSAECONNRESET) {
-                cerr << "Ошибка получения: " << errorCode << endl;
+            // Обработка ошибок
+            else if (recvPack->header.type == 3) {
+                cerr << "Ошибка: Адресат недостижим.\t";
+                if (recvPack->header.code == 0) {
+                    cerr << "Сеть недоступна";
+                } else if (recvPack->header.code == 1) {
+                    cerr << "Узел недоступен";
+                } else if (recvPack->header.code == 2) {
+                    cerr << "Протокол недоступен";
+                } else if (recvPack->header.code == 3) {
+                    cerr << "Порт недоступен";
+                } else if (recvPack->header.code == 4) {
+                    cerr << "Необходима фрагментация, но не задан бит ее запрета";
+                } else if (recvPack->header.code == 5) {
+                    cerr << "Ошибка на исходном маршруте";
+                } else if (recvPack->header.code == 6) {
+                    cerr << "Сеть адресата неизвестна";
+                } else if (recvPack->header.code == 7) {
+                    cerr << "Узел адресата неизвестен";
+                } else if (recvPack->header.code == 8) {
+                    cerr << "Исходный узел изолирован";
+                } else if (recvPack->header.code == 9) {
+                    cerr << "Сеть адресата административно изолирована";
+                } else if (recvPack->header.code == 10) {
+                    cerr << "Узел адресата административно изолирован";
+                } else if (recvPack->header.code == 11) {
+                    cerr << "Сеть недоступна для TOS";
+                } else if (recvPack->header.code == 12) {
+                    cerr << "Узел недоступен для TOS";
+                } else if (recvPack->header.code == 13) {
+                    cerr << "Связь административно запрещена фильтрацией";
+                } else if (recvPack->header.code == 14) {
+                    cerr << "Нарушение приоритета узлов";
+                } else if (recvPack->header.code == 15) {
+                    cerr << "Пренебрежение приоритетом узлов";
+                } else {
+                    cerr << "Ошибка";
+                }
+            } else if (recvPack->header.type == 4 && recvPack->header.code == 0) {
+                cerr << "Ошибка.\tПодавление отправителя.";
+            } else if (recvPack->header.type == 5) {
+                cerr << "Ошибка: Перенаправление.\t";
+                if (recvPack->header.code == 0) {
+                    cerr << "Перенаправление для сети";
+                } else if (recvPack->header.code == 1) {
+                    cerr << "Перенаправление на узел";
+                } else if (recvPack->header.code == 2) {
+                    cerr << "Перенаправление на TOS и сеть";
+                } else if (recvPack->header.code == 3) {
+                    cerr << "Перенаправление на TOS и узел";
+                } else {
+                    cerr << "Ошибка";
+                }
+            } else if (recvPack->header.type == 11) {
+                cerr << "Ошибка: Время превышено.\t";
+                if (recvPack->header.code == 0) {
+                    cerr << "TTL в ходе транзита равен 0";
+                } else if (recvPack->header.code == 1) {
+                    cerr << "TTL в ходе повторной сборки равен 0";
+                } else {
+                    cerr << "Ошибка";
+                }
+            } else if (recvPack->header.type == 12) {
+                cerr << "Ошибка: Проблема параметра.\t";
+                if (recvPack->header.code == 0) {
+                    cerr << "Неверный заголовок IP";
+                } else if (recvPack->header.code == 1) {
+                    cerr << "Отсутствует требуемый параметр";
+                } else {
+                    cerr << "Ошибка";
+                }
+            } else {
+                cerr << "Ошибка";
             }
-            break;
+
+            recved[i] = true;
         }
+
+        /// Проверка условий завершения
+        bool allSendedTrue = all_of(sended.begin(), sended.end(), [](const pair<int, bool> &pair) {
+            return pair.second == true;
+        });
+        bool allRecvedTrue = all_of(recved.begin(), recved.end(), [](const pair<int, bool> &pair) {
+            return pair.second == true;
+        });
+
+        /// Очистка памяти
+        delete[] recvBuffer;
+
+        /// Завершение
+        if (allSendedTrue && allRecvedTrue) {
+            break;
+        } else if (recved[i] == true && sended[i == true]) {
+            i++;
+        }
+
+        /// Задержка
+        this_thread::sleep_for(chrono::milliseconds(1000));
     }
 
-    delete[] recvBuffer;
-    return recvedGuids;
+    return 0;
 }
 
 unsigned short calculateChecksum(unsigned short *buffer, int size)

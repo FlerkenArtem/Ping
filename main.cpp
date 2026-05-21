@@ -31,7 +31,7 @@ unsigned short calculateChecksum(unsigned short *buffer, int size);
 
 int main()
 {
-    system("chcp 65001");
+    system("chcp 65001 > nul");
     setlocale(LC_ALL, ".UTF8");
     WSADATA wsaData;
     int wsaStartupResult = WSAStartup(MAKEWORD(2, 2), &wsaData);

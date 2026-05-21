@@ -86,12 +86,12 @@ int getSteps()
 {
     while (true) {
         int steps = 0;
-        cout << "Введите количество шагов: " << endl;
+        cout << "Введите количество шагов: ";
         cin >> steps;
         if (steps > 0)
             return steps;
         else
-            cout << endl << "Ошибка в количестве шагов."
+            cout << "Ошибка в количестве шагов."
                     " Необходимо указать целое число шагов,"
                     " которое больше 0." << endl;
     }
@@ -146,7 +146,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
 
     /// Начальное заполнение словарей
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    for (int i = 0; i < steps; i++) {
+    for (int i = 0; i < steps - 1; i++) {
         GUID guid;
         sended[i] = false;
         recved[i] = false;

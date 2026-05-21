@@ -13,8 +13,11 @@ using namespace std::chrono;
 /// Подключение сокета
 optional<sockaddr_in> connectAddr();
 
+/// Получение количества шагов
+int getSteps();
+
 /// Выполнение Ping
-unsigned long long ping(sockaddr_in destAddr);
+unsigned long long ping(sockaddr_in destAddr, int steps = 4);
 
 /// Условие завершения
 bool endPing(map<int, bool> recved, map<int, bool> sended);
@@ -41,7 +44,9 @@ int main()
         return 1;
     }
 
-    ping(*destAddr);
+    int steps = getSteps();
+
+    ping(*destAddr, steps);
 
     WSACleanup();
     return 0;
@@ -77,7 +82,22 @@ optional<sockaddr_in> connectAddr()
     return destAddr;
 }
 
-unsigned long long ping(sockaddr_in destAddr)
+int getSteps()
+{
+    while (true) {
+        int steps = 0;
+        cout << "Введите количество шагов: " << endl;
+        cin >> steps;
+        if (steps > 0)
+            return steps;
+        else
+            cout << endl << "Ошибка в количестве шагов."
+                    " Необходимо указать целое число шагов,"
+                    " которое больше 0." << endl;
+    }
+}
+
+unsigned long long ping(sockaddr_in destAddr, int steps)
 {
     /// Заголовок ICMP
     struct icmpHeader
@@ -126,7 +146,7 @@ unsigned long long ping(sockaddr_in destAddr)
 
     /// Начальное заполнение словарей
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < steps; i++) {
         GUID guid;
         sended[i] = false;
         recved[i] = false;

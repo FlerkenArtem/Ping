@@ -148,21 +148,29 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
     map<int, GUID> guids;
 
     /// Начальное заполнение словарей
-    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    for (int i = 0; i < steps; i++) {
-        GUID guid;
-        sended[i] = false;
-        recved[i] = false;
-        if (CoCreateGuid(&guid) == S_OK) {
-            guids[i] = guid;
-        } else {
-            cerr << "Ошибка генерации GUID";
-            CoUninitialize();
-            closesocket(sock);
-            return 1;
+    if (!FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) {
+        for (int i = 0; i < steps; i++) {
+            GUID guid;
+            sended[i] = false;
+            recved[i] = false;
+            if (CoCreateGuid(&guid) == S_OK) {
+                guids[i] = guid;
+            } else {
+                cerr << "Ошибка генерации GUID";
+                CoUninitialize();
+                closesocket(sock);
+                return 1;
+            }
         }
+        CoUninitialize();
     }
-    CoUninitialize();
+    else {
+        cerr << "Ошибка инициализации COM,"
+                "Невозможно создать GUID.";
+        CoUninitialize();
+        closesocket(sock);
+        return 1;
+    }
 
     int i = 0;
 

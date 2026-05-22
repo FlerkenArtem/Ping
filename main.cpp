@@ -157,6 +157,8 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             guids[i] = guid;
         } else {
             cerr << "Ошибка генерации GUID";
+            CoUninitialize();
+            closesocket(sock);
             return 1;
         }
     }

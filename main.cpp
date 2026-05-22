@@ -149,7 +149,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
 
     /// Начальное заполнение словарей
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    for (int i = 0; i < steps - 1; i++) {
+    for (int i = 0; i < steps; i++) {
         GUID guid;
         sended[i] = false;
         recved[i] = false;

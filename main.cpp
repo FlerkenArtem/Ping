@@ -87,13 +87,16 @@ int getSteps()
     while (true) {
         int steps = 0;
         cout << "Введите количество шагов: ";
-        cin >> steps;
-        if (steps > 0)
+        if (cin >> steps && steps > 0) {
             return steps;
-        else
-            cout << "Ошибка в количестве шагов."
-                    " Необходимо указать целое число шагов,"
-                    " которое больше 0." << endl;
+        }
+        else {
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+            cerr << "Ошибка в количестве шагов. "
+                    "Необходимо указать целое число шагов, "
+                    "которое больше 0." << endl;
+        }
     }
 }
 

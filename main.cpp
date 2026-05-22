@@ -189,21 +189,6 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         sendPack.header.checkSum = calculateChecksum(reinterpret_cast<unsigned short *>(&sendPack),
                                                      sizeof(sendPack));
 
-        // Таймаут отправки
-        DWORD sendTimeout = 1000;
-
-        // Установка таймаута отправки
-        if (setsockopt(sock,        // сокет
-                       SOL_SOCKET,  // уровень сокета
-                       SO_SNDTIMEO, // опция таймаута сокета
-                       reinterpret_cast<const char *>(
-                           &sendTimeout),   // указатель на буфер, содержащий значение таймаута
-                       sizeof(sendTimeout)) // размер буфера
-            == SOCKET_ERROR) {
-            cerr << "Не удалось установить таймаут на отправку: " << WSAGetLastError() << endl;
-            continue;
-        }
-
         // Сохранение времени начала
         auto start = high_resolution_clock::now();
 

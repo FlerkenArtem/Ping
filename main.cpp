@@ -20,7 +20,7 @@ int getSteps();
 unsigned long long ping(sockaddr_in destAddr, int steps = 4);
 
 /// Условие завершения
-bool endPing(map<int, bool> recved, map<int, bool> sended);
+bool endPing(const map<int, bool> &recved, const map<int, bool> &sended);
 
 /// Расчет контрольной суммы
 unsigned short calculateChecksum(unsigned short *buffer, int size);
@@ -397,7 +397,7 @@ unsigned short calculateChecksum(unsigned short *buffer, int size)
     return static_cast<unsigned short>(~cksum);
 }
 
-bool endPing(map<int, bool> recved, map<int, bool> sended)
+bool endPing(const map<int, bool> &recved, const map<int, bool> &sended)
 {
     /// Проверка условий завершения
     bool allSendedTrue = all_of(sended.begin(), sended.end(), [](const pair<int, bool> &pair) {

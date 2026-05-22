@@ -276,6 +276,11 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         if (bytesRecved > 0) {
             int ipHeaderLen = (recvBuffer[0] & 0x0F) * 4; // Вычисление длины IPv4 заголовка
 
+            // Обработка несоответствия размера полученного пакета минимальному
+            if ((unsigned int)bytesRecved < ipHeaderLen + sizeof(icmpPacket)) {
+                cerr << "Ошибка: Слишком малый размер полученных данных.";
+                continue;
+            }
             icmpPacket *recvPack = reinterpret_cast<icmpPacket *>(recvBuffer + ipHeaderLen);
 
             // Эхо-ответ

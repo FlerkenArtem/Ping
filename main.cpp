@@ -242,6 +242,12 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                                    reinterpret_cast<SOCKADDR *>(
                                        &destAddr), // указатель на адрес источника
                                    &addrLen);      // указатель на длину структуры адреса источнка
+
+            if (bytesRecved == SOCKET_ERROR) {
+                cerr << "Ошибка получения";
+                closesocket(sock);
+                return 1;
+            }
         } else if (selectRes == 0) {
             cerr << "Превышен интервал ожидания запроса." << endl;
             delete[] recvBuffer;

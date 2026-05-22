@@ -89,13 +89,13 @@ int getSteps()
         cout << "Введите количество шагов: ";
         if (cin >> steps && steps > 0) {
             return steps;
-        }
-        else {
+        } else {
             cin.clear();
             cin.ignore(numeric_limits<streamsize>::max(), '\n');
             cerr << "Ошибка в количестве шагов. "
                     "Необходимо указать целое число шагов, "
-                    "которое больше 0." << endl;
+                    "которое больше 0."
+                 << endl;
         }
     }
 }
@@ -129,11 +129,6 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
     unsigned long mode = 1;
     ioctlsocket(sock, FIONBIO, &mode);
 
-    sockaddr_in localAddr;
-    localAddr.sin_family = AF_INET;
-    localAddr.sin_port = 0;
-    localAddr.sin_addr.s_addr = INADDR_ANY;
-
     /// Создание словарей
     /// Ключ - целое число, служит для связи GUID и его состояний
     map<int, bool> sended;
@@ -156,8 +151,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             }
         }
         CoUninitialize();
-    }
-    else {
+    } else {
         cerr << "Ошибка инициализации COM,"
                 "Невозможно создать GUID.";
         CoUninitialize();
@@ -270,7 +264,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             int ipHeaderLen = (recvBuffer[0] & 0x0F) * 4; // Вычисление длины IPv4 заголовка
 
             // Обработка несоответствия размера полученного пакета минимальному
-            if ((unsigned int)bytesRecved < ipHeaderLen + sizeof(icmpPacket)) {
+            if ((unsigned int) bytesRecved < ipHeaderLen + sizeof(icmpPacket)) {
                 cerr << "Ошибка: Слишком малый размер полученных данных.";
                 continue;
             }

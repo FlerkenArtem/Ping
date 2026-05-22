@@ -134,13 +134,6 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
     localAddr.sin_port = 0;
     localAddr.sin_addr.s_addr = INADDR_ANY;
 
-    if (bind(sock, (SOCKADDR *) &localAddr, sizeof(localAddr)) == SOCKET_ERROR) {
-        cerr << "Ошибка bind для SOCK_RAW: " << WSAGetLastError() << endl;
-        closesocket(sock);
-        WSACleanup();
-        return SOCKET_ERROR;
-    }
-
     /// Создание словарей
     /// Ключ - целое число, служит для связи GUID и его состояний
     map<int, bool> sended;

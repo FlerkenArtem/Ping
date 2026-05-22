@@ -379,6 +379,8 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         this_thread::sleep_for(chrono::milliseconds(1000));
     }
 
+    // Закрытие сокета
+    closesocket(sock);
     return 0;
 }
 

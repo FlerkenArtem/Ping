@@ -152,9 +152,8 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         }
         CoUninitialize();
     } else {
-        cerr << "Ошибка инициализации COM,"
-                "Невозможно создать GUID.";
-        CoUninitialize();
+        cerr << "Ошибка инициализации COM, "
+                "невозможно создать GUID.";
         closesocket(sock);
         return 1;
     }

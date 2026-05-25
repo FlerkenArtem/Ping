@@ -267,6 +267,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             // Обработка несоответствия размера полученного пакета минимальному
             if ((unsigned int) bytesRecved < ipHeaderLen + sizeof(icmpPacket)) {
                 cerr << "Ошибка: Слишком малый размер полученных данных.";
+                delete[] recvBuffer;
                 continue;
             }
             icmpPacket *recvPack = reinterpret_cast<icmpPacket *>(recvBuffer + ipHeaderLen);

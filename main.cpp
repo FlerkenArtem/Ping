@@ -233,6 +233,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             if (bytesRecved == SOCKET_ERROR) {
                 cerr << "Ошибка получения";
                 closesocket(sock);
+                delete[] recvBuffer;
                 return 1;
             }
         } else if (selectRes == 0) {

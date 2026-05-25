@@ -220,13 +220,15 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
 
         int bytesRecved;
 
+        sockaddr_in fromAddr;
+
         if (selectRes > 0) {
             bytesRecved = recvfrom(sock,       // сокет
                                    recvBuffer, // указатель на буфер для приема данных
                                    bufferSize, // размер буфера
                                    0,          // флаги
                                    reinterpret_cast<SOCKADDR *>(
-                                       &destAddr), // указатель на адрес источника
+                                       &fromAddr), // указатель на адрес источника
                                    &addrLen);      // указатель на длину структуры адреса источнка
 
             if (bytesRecved == SOCKET_ERROR) {

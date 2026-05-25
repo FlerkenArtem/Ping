@@ -162,7 +162,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
     int i = 0;
 
     /// Цикл отправки и приема пакетов
-    while (true) {
+    while (i < steps) {
         // Объявление пары GUID для сравнения
         GUID origGuid = guids[i];
         GUID recvedGuid;

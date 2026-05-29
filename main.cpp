@@ -170,8 +170,16 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         sendPack.data = guids[i].origGuid;
         sendPack.header.checkSum = calculateChecksum((unsigned short *) &sendPack, sizeof(sendPack));
 
-        // Сохранение времени начала
-        auto start = high_resolution_clock::now();
+        high_resolution_clock::duration iterationSendDiff;
+
+        if (i != 0) {
+            iterationSendDiff = high_resolution_clock::now() - guids[i - 1].sendTime;
+
+            if (iterationSendDiff < 1s) {
+                high_resolution_clock::duration sleepDuration = 1s - iterationSendDiff;
+                this_thread::sleep_for(sleepDuration);
+            }
+        }
 
         // Отправка
         int res = sendto(sock,
@@ -180,16 +188,16 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                          0,
                          (sockaddr *) &destAddr,
                          sizeof(destAddr));
-        guids[i].sended = true;
 
         // Обработка ошибок отправки
         if (res == SOCKET_ERROR) {
             cerr << "Ошибка отправки: " << WSAGetLastError() << endl;
-            guids[i].sended = true;
         } else {
             cout << "Пакет отправлен." << endl;
-            guids[i].sended = true;
         }
+
+        guids[i].sendTime = high_resolution_clock::now();
+        guids[i].sended = true;
 
         // Установка размера буфера: IPv4-заголовок (20) + ICMP-пакет
         const int bufferSize = 20 + sizeof(icmpPacket);
@@ -254,10 +262,10 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         }
 
         // Время принятия пакета
-        auto end = high_resolution_clock::now();
+        guids[i].recvTime = high_resolution_clock::now();
 
         // Разница
-        duration<double, milli> diff = end - start;
+        duration<double, milli> diff = guids[i].recvTime - guids[i].sendTime;
 
         if (bytesRecved > 0) {
             int ipHeaderLen = (recvBuffer[0] & 0x0F) * 4; // Вычисление длины IPv4 заголовка
@@ -365,9 +373,6 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
 
         if (endPing(guids))
             break;
-
-        // Задержка
-        this_thread::sleep_for(chrono::milliseconds(1000));
     }
 
     // Закрытие сокета

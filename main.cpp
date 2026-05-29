@@ -29,15 +29,15 @@ int main()
 {
     system("chcp 65001 > nul");
     setlocale(LC_ALL, ".UTF8");
+
+    cout << "PING" << endl;
+
     WSADATA wsaData;
     int wsaStartupResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
     if (wsaStartupResult != 0) {
         cerr << "Ошибка инициализации Winsock: " << wsaStartupResult << endl;
         return 1;
     }
-
-    cout << "PING" << endl;
-
     optional<sockaddr_in> destAddr = connectAddr();
     if (destAddr == nullopt) {
         cerr << "Ошибка подключения к адресу" << endl;
@@ -75,7 +75,7 @@ optional<sockaddr_in> connectAddr()
     }
 
     if (result != nullptr && result->ai_addr != nullptr) {
-        memcpy(&destAddr, result->ai_addr, sizeof(sockaddr_in));
+        destAddr = *(sockaddr_in *) result->ai_addr;
     }
 
     freeaddrinfo(result);

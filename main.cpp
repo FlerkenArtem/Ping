@@ -10,6 +10,21 @@
 using namespace std;
 using namespace std::chrono;
 
+/// Заголовок ICMP
+struct icmpHeader
+{
+    unsigned char type;
+    unsigned char code;
+    unsigned short checkSum;
+};
+
+/// ICMP-пакет
+struct icmpPacket
+{
+    icmpHeader header;
+    GUID data;
+};
+
 /// Подключение сокета
 optional<sockaddr_in> connectAddr();
 
@@ -102,21 +117,6 @@ int getSteps()
 
 unsigned long long ping(sockaddr_in destAddr, int steps)
 {
-    /// Заголовок ICMP
-    struct icmpHeader
-    {
-        unsigned char type;
-        unsigned char code;
-        unsigned short checkSum;
-    };
-
-    /// ICMP-пакет
-    struct icmpPacket
-    {
-        icmpHeader header;
-        GUID data;
-    };
-
     /// Создание сокета
     SOCKET sock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
     if (sock == INVALID_SOCKET) {

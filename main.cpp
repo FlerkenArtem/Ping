@@ -26,10 +26,10 @@ struct icmpPacket
 };
 
 /// Структура с дополнительными данными о пакете
-struct sendedData
+struct packData
 {
-    int i;
-    GUID data;
+    GUID origGuid;
+    GUID recvedGuid;
     bool sended;
     bool recved;
     time_point<system_clock> sendTime;
@@ -46,7 +46,7 @@ int getSteps();
 unsigned long long ping(sockaddr_in destAddr, int steps = 4);
 
 /// Условие завершения
-bool endPing(const map<int, bool> &recved, const map<int, bool> &sended);
+bool endPing(const map<int, packData> &guids);
 
 /// Расчет контрольной суммы
 unsigned short calculateChecksum(unsigned short *buffer, int size);
@@ -140,41 +140,34 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
     unsigned long mode = 1;
     ioctlsocket(sock, FIONBIO, &mode);
 
-    /// Создание словарей
-    /// Ключ - целое число, служит для связи GUID и его состояний
-    map<int, bool> sended;
-    map<int, bool> recved;
-    map<int, GUID> guids;
+    /// Создание словаря guids, который содержит структуру содержащую:
+    /// оригинальный и полученный GUID,
+    /// статус отправки и получения для каждого GUID,
+    /// время отправки и получения для каждого GUID.
+    map<int, packData> guids;
 
-    /// Начальное заполнение словарей
+    /// Начальное заполнение словаря
     for (int i = 0; i < steps; i++) {
         GUID guid;
-        sended[i] = false;
-        recved[i] = false;
         if (CoCreateGuid(&guid) == S_OK) {
-            guids[i] = guid;
+            packData data;
+            data.origGuid = guid;
+            guids[i] = data;
         } else {
             cerr << "Ошибка генерации GUID";
-            CoUninitialize();
             closesocket(sock);
             return 1;
         }
     }
 
-    int i = 0;
-
     /// Цикл отправки и приема пакетов
-    while (i < steps) {
-        // Объявление пары GUID для сравнения
-        GUID origGuid = guids[i];
-        GUID recvedGuid;
-
+    for (int i = 0; i < steps; i++) {
         // Формирование пакета на отправку
         icmpPacket sendPack;
         sendPack.header.type = 8;
         sendPack.header.code = 0;
         sendPack.header.checkSum = 0;
-        sendPack.data = origGuid;
+        sendPack.data = guids[i].origGuid;
         sendPack.header.checkSum = calculateChecksum((unsigned short *) &sendPack, sizeof(sendPack));
 
         // Сохранение времени начала
@@ -187,15 +180,15 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                          0,
                          (sockaddr *) &destAddr,
                          sizeof(destAddr));
-        sended[i] = true;
+        guids[i].sended = true;
 
         // Обработка ошибок отправки
         if (res == SOCKET_ERROR) {
             cerr << "Ошибка отправки: " << WSAGetLastError() << endl;
-            sended[i] = true;
+            guids[i].sended = true;
         } else {
             cout << "Пакет отправлен." << endl;
-            sended[i] = true;
+            guids[i].sended = true;
         }
 
         // Установка размера буфера: IPv4-заголовок (20) + ICMP-пакет
@@ -226,18 +219,18 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         if (selectRes == SOCKET_ERROR) {
             cerr << "Ошибка select: " << WSAGetLastError() << endl;
             delete[] recvBuffer;
-            recved[i] = true;
+            guids[i].recved = true;
             i++;
-            if (endPing(recved, sended))
+            if (endPing(guids))
                 break;
             continue;
         }
 
         if (selectRes == 0) {
             cerr << "Истек таймаут ожидаения пакета" << endl;
-            recved[i] = true;
+            guids[i].recved = true;
             i++;
-            if (endPing(recved, sended))
+            if (endPing(guids))
                 break;
             continue;
         }
@@ -249,12 +242,12 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                                    0,                      // флаги
                                    (SOCKADDR *) &fromAddr, // указатель на адрес источника
                                    &addrLen); // указатель на длину структуры адреса источника
-            recved[i] = true;
+            guids[i].recved = true;
             if (bytesRecved == SOCKET_ERROR && WSAGetLastError() != WSAEMSGSIZE) {
                 cerr << "Ошибка select: " << WSAGetLastError() << endl;
                 delete[] recvBuffer;
                 i++;
-                if (endPing(recved, sended))
+                if (endPing(guids))
                     break;
                 continue;
             }
@@ -280,10 +273,10 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             // Эхо-ответ
             if (recvPack->header.type == 0 && recvPack->header.code == 0) {
                 // Получение GUID из ответа
-                recvedGuid = recvPack->data;
+                guids[i].recvedGuid = recvPack->data;
 
                 // Сравнение оригинального и полученного GUID
-                if (IsEqualGUID(recvedGuid, origGuid)) {
+                if (IsEqualGUID(guids[i].recvedGuid, guids[i].origGuid)) {
                     cout << "Успешное получение (" << diff.count() << " мс)" << endl;
                 } else {
                     cerr << "Получен чужой пакет";
@@ -364,16 +357,14 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                 cerr << "Ошибка";
             }
 
-            recved[i] = true;
+            guids[i].recved = true;
         }
 
         // Очистка памяти
         delete[] recvBuffer;
 
-        if (endPing(recved, sended))
+        if (endPing(guids))
             break;
-
-        i++;
 
         // Задержка
         this_thread::sleep_for(chrono::milliseconds(1000));
@@ -399,20 +390,9 @@ unsigned short calculateChecksum(unsigned short *buffer, int size)
     return static_cast<unsigned short>(~cksum);
 }
 
-bool endPing(const map<int, bool> &recved, const map<int, bool> &sended)
+bool endPing(const map<int, packData> &guids)
 {
-    /// Проверка условий завершения
-    bool allSendedTrue = all_of(sended.begin(), sended.end(), [](const pair<int, bool> &pair) {
-        return pair.second == true;
+    return std::none_of(guids.begin(), guids.end(), [](const auto &pair) {
+        return !pair.second.sended || !pair.second.recved;
     });
-    bool allRecvedTrue = all_of(recved.begin(), recved.end(), [](const pair<int, bool> &pair) {
-        return pair.second == true;
-    });
-
-    /// Завершение
-    if (allSendedTrue && allRecvedTrue) {
-        return true;
-    } else {
-        return false;
-    }
 }

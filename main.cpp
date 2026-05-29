@@ -25,6 +25,17 @@ struct icmpPacket
     GUID data;
 };
 
+/// Структура с дополнительными данными о пакете
+struct sendedData
+{
+    int i;
+    GUID data;
+    bool sended;
+    bool recved;
+    time_point<system_clock> sendTime;
+    time_point<system_clock> recvTime;
+};
+
 /// Подключение сокета
 optional<sockaddr_in> connectAddr();
 
@@ -164,18 +175,17 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         sendPack.header.code = 0;
         sendPack.header.checkSum = 0;
         sendPack.data = origGuid;
-        sendPack.header.checkSum = calculateChecksum(reinterpret_cast<unsigned short *>(&sendPack),
-                                                     sizeof(sendPack));
+        sendPack.header.checkSum = calculateChecksum((unsigned short *) &sendPack, sizeof(sendPack));
 
         // Сохранение времени начала
         auto start = high_resolution_clock::now();
 
         // Отправка
         int res = sendto(sock,
-                         reinterpret_cast<const char *>(&sendPack),
+                         (const char *) &sendPack,
                          sizeof(sendPack),
                          0,
-                         reinterpret_cast<SOCKADDR *>(&destAddr),
+                         (sockaddr *) &destAddr,
                          sizeof(destAddr));
         sended[i] = true;
 
@@ -202,43 +212,18 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         FD_ZERO(&fdSet);      // Очистка
         FD_SET(sock, &fdSet); // Добавление сокета в набор
 
-        // Таймаут получения
-        timeval recvTimeout;
-        recvTimeout.tv_sec = 3;  // с
-        recvTimeout.tv_usec = 0; // мкс
+        timeval timeout;
+        timeout.tv_sec = 3;
+        timeout.tv_usec = 0;
 
-        // Установка таймаута с помощью select
-        int selectRes = select(0, &fdSet, NULL, NULL, &recvTimeout);
+        // select
+        int selectRes = select(0, &fdSet, NULL, NULL, &timeout);
 
-        int bytesRecved;
+        int bytesRecved = 0;
 
         sockaddr_in fromAddr;
 
-        if (selectRes > 0) {
-            bytesRecved = recvfrom(sock,       // сокет
-                                   recvBuffer, // указатель на буфер для приема данных
-                                   bufferSize, // размер буфера
-                                   0,          // флаги
-                                   reinterpret_cast<SOCKADDR *>(
-                                       &fromAddr), // указатель на адрес источника
-                                   &addrLen);      // указатель на длину структуры адреса источнка
-
-            if (bytesRecved == SOCKET_ERROR) {
-                cerr << "Ошибка получения";
-                closesocket(sock);
-                delete[] recvBuffer;
-                return 1;
-            }
-        } else if (selectRes == 0) {
-            cerr << "Превышен интервал ожидания запроса." << endl;
-            delete[] recvBuffer;
-            recved[i] = true;
-            i++;
-            if (endPing(recved, sended))
-                break;
-            continue;
-
-        } else {
+        if (selectRes == SOCKET_ERROR) {
             cerr << "Ошибка select: " << WSAGetLastError() << endl;
             delete[] recvBuffer;
             recved[i] = true;
@@ -246,6 +231,33 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             if (endPing(recved, sended))
                 break;
             continue;
+        }
+
+        if (selectRes == 0) {
+            cerr << "Истек таймаут ожидаения пакета" << endl;
+            recved[i] = true;
+            i++;
+            if (endPing(recved, sended))
+                break;
+            continue;
+        }
+
+        if (FD_ISSET(sock, &fdSet)) {
+            bytesRecved = recvfrom(sock,                   // сокет
+                                   recvBuffer,             // указатель на буфер для приема данных
+                                   bufferSize,             // размер буфера
+                                   0,                      // флаги
+                                   (SOCKADDR *) &fromAddr, // указатель на адрес источника
+                                   &addrLen); // указатель на длину структуры адреса источника
+            recved[i] = true;
+            if (bytesRecved == SOCKET_ERROR && WSAGetLastError() != WSAEMSGSIZE) {
+                cerr << "Ошибка select: " << WSAGetLastError() << endl;
+                delete[] recvBuffer;
+                i++;
+                if (endPing(recved, sended))
+                    break;
+                continue;
+            }
         }
 
         // Время принятия пакета
@@ -263,7 +275,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                 delete[] recvBuffer;
                 continue;
             }
-            icmpPacket *recvPack = reinterpret_cast<icmpPacket *>(recvBuffer + ipHeaderLen);
+            icmpPacket *recvPack = (icmpPacket *) (recvBuffer + ipHeaderLen);
 
             // Эхо-ответ
             if (recvPack->header.type == 0 && recvPack->header.code == 0) {

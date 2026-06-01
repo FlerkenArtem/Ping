@@ -303,78 +303,82 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                 }
             }
             // Обработка ошибок
-            else if (recvPack->header.type == 3) {
-                cerr << "Ошибка: Адресат недостижим.\t";
-                if (recvPack->header.code == 0) {
-                    cerr << "Сеть недоступна.";
-                } else if (recvPack->header.code == 1) {
-                    cerr << "Узел недоступен.";
-                } else if (recvPack->header.code == 2) {
-                    cerr << "Протокол недоступен.";
-                } else if (recvPack->header.code == 3) {
-                    cerr << "Порт недоступен.";
-                } else if (recvPack->header.code == 4) {
-                    cerr << "Необходима фрагментация, но не задан бит ее запрета.";
-                } else if (recvPack->header.code == 5) {
-                    cerr << "Ошибка на исходном маршруте.";
-                } else if (recvPack->header.code == 6) {
-                    cerr << "Сеть адресата неизвестна.";
-                } else if (recvPack->header.code == 7) {
-                    cerr << "Узел адресата неизвестен.";
-                } else if (recvPack->header.code == 8) {
-                    cerr << "Исходный узел изолирован.";
-                } else if (recvPack->header.code == 9) {
-                    cerr << "Сеть адресата административно изолирована.";
-                } else if (recvPack->header.code == 10) {
-                    cerr << "Узел адресата административно изолирован.";
-                } else if (recvPack->header.code == 11) {
-                    cerr << "Сеть недоступна для TOS.";
-                } else if (recvPack->header.code == 12) {
-                    cerr << "Узел недоступен для TOS.";
-                } else if (recvPack->header.code == 13) {
-                    cerr << "Связь административно запрещена фильтрацией.";
-                } else if (recvPack->header.code == 14) {
-                    cerr << "Нарушение приоритета узлов.";
-                } else if (recvPack->header.code == 15) {
-                    cerr << "Пренебрежение приоритетом узлов.";
-                } else {
-                    cerr << "Ошибка.";
-                }
-            } else if (recvPack->header.type == 4 && recvPack->header.code == 0) {
-                cerr << "Ошибка.\tПодавление отправителя.";
-            } else if (recvPack->header.type == 5) {
-                cerr << "Ошибка: Перенаправление.\t";
-                if (recvPack->header.code == 0) {
-                    cerr << "Перенаправление для сети.";
-                } else if (recvPack->header.code == 1) {
-                    cerr << "Перенаправление на узел.";
-                } else if (recvPack->header.code == 2) {
-                    cerr << "Перенаправление на TOS и сеть.";
-                } else if (recvPack->header.code == 3) {
-                    cerr << "Перенаправление на TOS и узел.";
-                } else {
-                    cerr << "Ошибка.";
-                }
-            } else if (recvPack->header.type == 11) {
-                cerr << "Ошибка: Время превышено.\t";
-                if (recvPack->header.code == 0) {
-                    cerr << "TTL в ходе транзита равен 0.";
-                } else if (recvPack->header.code == 1) {
-                    cerr << "TTL в ходе повторной сборки равен 0.";
-                } else {
-                    cerr << "Ошибка.";
-                }
-            } else if (recvPack->header.type == 12) {
-                cerr << "Ошибка: Проблема параметра.\t";
-                if (recvPack->header.code == 0) {
-                    cerr << "Неверный заголовок IP.";
-                } else if (recvPack->header.code == 1) {
-                    cerr << "Отсутствует требуемый параметр.";
+            else if (IsEqualGUID(recvPack->data, origGuid)) {
+                if (recvPack->header.type == 3) {
+                    cerr << "Ошибка: Адресат недостижим.\t";
+                    if (recvPack->header.code == 0) {
+                        cerr << "Сеть недоступна.";
+                    } else if (recvPack->header.code == 1) {
+                        cerr << "Узел недоступен.";
+                    } else if (recvPack->header.code == 2) {
+                        cerr << "Протокол недоступен.";
+                    } else if (recvPack->header.code == 3) {
+                        cerr << "Порт недоступен.";
+                    } else if (recvPack->header.code == 4) {
+                        cerr << "Необходима фрагментация, но не задан бит ее запрета.";
+                    } else if (recvPack->header.code == 5) {
+                        cerr << "Ошибка на исходном маршруте.";
+                    } else if (recvPack->header.code == 6) {
+                        cerr << "Сеть адресата неизвестна.";
+                    } else if (recvPack->header.code == 7) {
+                        cerr << "Узел адресата неизвестен.";
+                    } else if (recvPack->header.code == 8) {
+                        cerr << "Исходный узел изолирован.";
+                    } else if (recvPack->header.code == 9) {
+                        cerr << "Сеть адресата административно изолирована.";
+                    } else if (recvPack->header.code == 10) {
+                        cerr << "Узел адресата административно изолирован.";
+                    } else if (recvPack->header.code == 11) {
+                        cerr << "Сеть недоступна для TOS.";
+                    } else if (recvPack->header.code == 12) {
+                        cerr << "Узел недоступен для TOS.";
+                    } else if (recvPack->header.code == 13) {
+                        cerr << "Связь административно запрещена фильтрацией.";
+                    } else if (recvPack->header.code == 14) {
+                        cerr << "Нарушение приоритета узлов.";
+                    } else if (recvPack->header.code == 15) {
+                        cerr << "Пренебрежение приоритетом узлов.";
+                    } else {
+                        cerr << "Ошибка.";
+                    }
+                } else if (recvPack->header.type == 4 && recvPack->header.code == 0) {
+                    cerr << "Ошибка.\tПодавление отправителя.";
+                } else if (recvPack->header.type == 5) {
+                    cerr << "Ошибка: Перенаправление.\t";
+                    if (recvPack->header.code == 0) {
+                        cerr << "Перенаправление для сети.";
+                    } else if (recvPack->header.code == 1) {
+                        cerr << "Перенаправление на узел.";
+                    } else if (recvPack->header.code == 2) {
+                        cerr << "Перенаправление на TOS и сеть.";
+                    } else if (recvPack->header.code == 3) {
+                        cerr << "Перенаправление на TOS и узел.";
+                    } else {
+                        cerr << "Ошибка.";
+                    }
+                } else if (recvPack->header.type == 11) {
+                    cerr << "Ошибка: Время превышено.\t";
+                    if (recvPack->header.code == 0) {
+                        cerr << "TTL в ходе транзита равен 0.";
+                    } else if (recvPack->header.code == 1) {
+                        cerr << "TTL в ходе повторной сборки равен 0.";
+                    } else {
+                        cerr << "Ошибка.";
+                    }
+                } else if (recvPack->header.type == 12) {
+                    cerr << "Ошибка: Проблема параметра.\t";
+                    if (recvPack->header.code == 0) {
+                        cerr << "Неверный заголовок IP.";
+                    } else if (recvPack->header.code == 1) {
+                        cerr << "Отсутствует требуемый параметр.";
+                    } else {
+                        cerr << "Ошибка.";
+                    }
                 } else {
                     cerr << "Ошибка.";
                 }
             } else {
-                cerr << "Ошибка.";
+                cerr << "Был получен чужой пакет с ошибкой.";
             }
 
             recved = true;

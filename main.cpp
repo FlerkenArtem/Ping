@@ -28,8 +28,8 @@ struct icmpPacket
 struct packData
 {
     GUID recvedGuid;
-    time_point<system_clock> sendTime;
-    time_point<system_clock> recvTime;
+    time_point<high_resolution_clock> sendTime;
+    time_point<high_resolution_clock> recvTime;
 };
 
 /// Подключение сокета
@@ -235,7 +235,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             continue;
         }
 
-        time_point<system_clock> recvStartTime;
+        time_point<high_resolution_clock> recvStartTime;
 
         if (FD_ISSET(sock, &fdSet)) {
             recvStartTime = high_resolution_clock::now();

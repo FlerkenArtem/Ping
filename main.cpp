@@ -1,10 +1,13 @@
-#include <winsock2.h>
-#include <ws2tcpip.h>
+#include <algorithm>
 #include <combaseapi.h>
 #include <iostream>
 #include <map>
+#include <numeric>
 #include <optional>
 #include <thread>
+#include <vector>
+#include <winsock2.h>
+#include <ws2tcpip.h>
 
 using namespace std;
 using namespace std::chrono;
@@ -164,6 +167,12 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
     /// время отправки и получения GUID.
     map<GUID, packData> guids;
 
+    // Вектор времени ответа
+    vector<double> timeDiff;
+
+    // Вектор успеха или неудач при получени
+    vector<bool> success;
+
     // Последний обработанный GUID
     GUID lastGuid;
 
@@ -251,11 +260,13 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         if (selectRes == SOCKET_ERROR) {
             cerr << "Ошибка select: " << WSAGetLastError() << endl;
             recved = true;
+            success.push_back(false);
             delete[] recvBuffer;
         }
 
         if (selectRes == 0) {
             cerr << "Истек таймаут ожидаения пакета." << endl;
+            success.push_back(false);
             recved = true;
         }
 
@@ -269,6 +280,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             recved = true;
             if (bytesRecved == SOCKET_ERROR && WSAGetLastError() != WSAEMSGSIZE) {
                 cerr << "Ошибка select: " << WSAGetLastError() << endl;
+                success.push_back(false);
                 delete[] recvBuffer;
                 continue;
             }
@@ -298,12 +310,16 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                 // Сравнение оригинального и полученного GUID
                 if (IsEqualGUID(origGuid, guids[origGuid].recvedGuid)) {
                     cout << "Успешное получение (" << diff.count() << " мс)." << endl;
+                    timeDiff.push_back(diff.count());
+                    success.push_back(true);
                 } else {
                     cerr << "Получен чужой пакет.";
+                    success.push_back(false);
                 }
             }
             // Обработка ошибок
             else if (IsEqualGUID(recvPack->data, origGuid)) {
+                success.push_back(false);
                 if (recvPack->header.type == 3) {
                     cerr << "Ошибка: Адресат недостижим.\t";
                     if (recvPack->header.code == 0) {
@@ -391,6 +407,34 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             i++;
             lastGuid = origGuid;
         }
+    }
+
+    /// Вывод статискики
+    cout << endl << "Статистика" << endl << endl;
+
+    if (success.size() > 0) {
+        int cnt = success.size();
+        int trueCnt = count(success.begin(), success.end(), true);
+        int falseCnt = count(success.begin(), success.end(), false);
+
+        double falsePercent = (falseCnt / success.size()) * 100;
+
+        cout << "Пакетов отправлено: " << cnt << endl
+             << "Успешно: " << trueCnt << endl
+             << "С ошибкой: " << falseCnt << endl
+             << "Процент ошибок: " << falsePercent << " %" << endl
+             << endl;
+    }
+
+    if (timeDiff.size() > 0) {
+        double min = *min_element(timeDiff.begin(), timeDiff.end());
+        double avg = accumulate(timeDiff.begin(), timeDiff.end(), 0.0) / timeDiff.size();
+        double max = *max_element(timeDiff.begin(), timeDiff.end());
+
+        cout << "Минимальное время: " << min << " мс." << endl
+             << "Среднее время: " << avg << " мс." << endl
+             << "Максимальное время: " << max << " мс." << endl
+             << endl;
     }
 
     // Закрытие сокета

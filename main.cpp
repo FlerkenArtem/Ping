@@ -295,11 +295,14 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         duration<double, milli> diff = guids[origGuid].recvTime - guids[origGuid].sendTime;
 
         if (bytesRecved > 0) {
-            int ipHeaderLen = (recvBuffer[0] & 0x0F) * 4; // Вычисление длины IPv4 заголовка
+            // Минимальная длина IP-заголовка
+            int ipHeaderLen = 20;
 
             // Обработка несоответствия размера полученного пакета минимальному
             if ((unsigned int) bytesRecved < ipHeaderLen + sizeof(icmpPacket)) {
-                cerr << "Ошибка: Слишком малый размер полученных данных.";
+                cerr << "Ошибка: Слишком малый размер полученных данных. "
+                        "Должны быть получены данные, содержащие IP-заголовок "
+                        "и ICMP-пакет";
                 delete[] recvBuffer;
             }
             icmpPacket *recvPack = (icmpPacket *) (recvBuffer + ipHeaderLen);

@@ -262,15 +262,11 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             recved = true;
             success.push_back(false);
             delete[] recvBuffer;
-        }
-
-        if (selectRes == 0) {
+        } else if (selectRes == 0) {
             cerr << "Истек таймаут ожидаения пакета." << endl;
             success.push_back(false);
             recved = true;
-        }
-
-        if (selectRes > 0) {
+        } else if (selectRes > 0) {
             if (FD_ISSET(sock, &fdSet)) {
                 bytesRecved = recvfrom(sock,       // сокет
                                        recvBuffer, // указатель на буфер для приема данных
@@ -284,6 +280,10 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                     success.push_back(false);
                     delete[] recvBuffer;
                     continue;
+                } else if (bytesRecved == WSAETIMEDOUT) {
+                    cerr << "Истек таймаут ожидаения пакета." << endl;
+                    success.push_back(false);
+                    recved = true;
                 }
             }
         }

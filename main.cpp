@@ -417,7 +417,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
     /// Вывод статискики
     cout << endl << "Статистика" << endl << endl;
 
-    if (success.size() > 0) {
+    if (success.size() == (unsigned long long) steps) {
         int cnt = success.size();
         int trueCnt = count(success.begin(), success.end(), true);
         int falseCnt = count(success.begin(), success.end(), false);
@@ -429,6 +429,10 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
              << "С ошибкой: " << falseCnt << endl
              << "Процент ошибок: " << falsePercent << " %" << endl
              << endl;
+    } else {
+        cerr << "Ошибка при формировании статистики по отправке пакетов. "
+                "Статистика создана на иное количество пакетов, "
+                "чем было отправлено.";
     }
 
     if (timeDiff.size() > 0) {

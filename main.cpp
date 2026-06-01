@@ -432,7 +432,9 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
     } else {
         cerr << "Ошибка при формировании статистики по отправке пакетов. "
                 "Статистика создана на иное количество пакетов, "
-                "чем было отправлено.";
+                "чем было отправлено."
+             << endl
+             << endl;
     }
 
     if (timeDiff.size() > 0) {
@@ -443,6 +445,11 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         cout << "Минимальное время: " << min << " мс." << endl
              << "Среднее время: " << avg << " мс." << endl
              << "Максимальное время: " << max << " мс." << endl
+             << endl;
+    } else {
+        cerr << "Не было получено ни одного пакета. "
+                "Статистику времени получения составить невозможно."
+             << endl
              << endl;
     }
 

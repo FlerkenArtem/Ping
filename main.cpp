@@ -47,8 +47,8 @@ unsigned long long ping(sockaddr_in destAddr, int steps = 4);
 /// Расчет контрольной суммы
 unsigned short calculateChecksum(unsigned short *buffer, int size);
 
-/// Оператор сравнения 2 GUID побайтово
-bool operator<(const GUID &a, const GUID &b);
+/// Оператор сравнения 2 GUID
+bool operator<(const GUID &guid1, const GUID &guid2);
 
 int main()
 {
@@ -459,7 +459,21 @@ unsigned short calculateChecksum(unsigned short *buffer, int size)
     return static_cast<unsigned short>(~cksum);
 }
 
-bool operator<(const GUID &a, const GUID &b)
+bool operator<(const GUID &guid1, const GUID &guid2)
 {
-    return memcmp(&a, &b, sizeof(GUID)) < 0;
+    if (guid1.Data1 != guid2.Data1) {
+        return guid1.Data1 < guid2.Data1;
+    }
+    if (guid1.Data2 != guid2.Data2) {
+        return guid1.Data2 < guid2.Data2;
+    }
+    if (guid1.Data3 != guid2.Data3) {
+        return guid1.Data3 < guid2.Data3;
+    }
+    for (int i = 0; i < 8; i++) {
+        if (guid1.Data4[i] != guid2.Data4[i]) {
+            return guid1.Data4[i] < guid2.Data4[i];
+        }
+    }
+    return false;
 }

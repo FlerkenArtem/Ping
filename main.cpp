@@ -28,8 +28,6 @@ struct icmpPacket
 struct packData
 {
     GUID recvedGuid;
-    bool sended;
-    bool recved;
     time_point<system_clock> sendTime;
     time_point<system_clock> recvTime;
 };
@@ -229,19 +227,18 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         if (selectRes == SOCKET_ERROR) {
             cerr << "Ошибка select: " << WSAGetLastError() << endl;
             delete[] recvBuffer;
-            recved = true;
-            i++;
             continue;
         }
 
         if (selectRes == 0) {
             cerr << "Истек таймаут ожидаения пакета" << endl;
-            recved = true;
-            i++;
             continue;
         }
 
+        time_point<system_clock> recvStartTime;
+
         if (FD_ISSET(sock, &fdSet)) {
+            recvStartTime = high_resolution_clock::now();
             bytesRecved = recvfrom(sock,                   // сокет
                                    recvBuffer,             // указатель на буфер для приема данных
                                    bufferSize,             // размер буфера
@@ -252,13 +249,21 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             if (bytesRecved == SOCKET_ERROR && WSAGetLastError() != WSAEMSGSIZE) {
                 cerr << "Ошибка select: " << WSAGetLastError() << endl;
                 delete[] recvBuffer;
-                i++;
                 continue;
             }
         }
 
         // Время принятия пакета
         guids[origGuid].recvTime = high_resolution_clock::now();
+
+        // Время, за которое был получен пакет
+        duration<double, milli> recvDiff = guids[origGuid].recvTime - recvStartTime;
+
+        // Обработка времени получения более 3 секунд
+        if (recvDiff > 3s) {
+            cerr << "Истек таймаут ожидаения пакета" << endl;
+            continue;
+        }
 
         // Разница
         duration<double, milli> diff = guids[origGuid].recvTime - guids[origGuid].sendTime;

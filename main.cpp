@@ -270,19 +270,21 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             recved = true;
         }
 
-        if (FD_ISSET(sock, &fdSet)) {
-            bytesRecved = recvfrom(sock,                   // сокет
-                                   recvBuffer,             // указатель на буфер для приема данных
-                                   bufferSize,             // размер буфера
-                                   0,                      // флаги
-                                   (SOCKADDR *) &fromAddr, // указатель на адрес источника
-                                   &addrLen); // указатель на длину структуры адреса источника
-            recved = true;
-            if (bytesRecved == SOCKET_ERROR && WSAGetLastError() != WSAEMSGSIZE) {
-                cerr << "Ошибка select: " << WSAGetLastError() << endl;
-                success.push_back(false);
-                delete[] recvBuffer;
-                continue;
+        if (selectRes > 0) {
+            if (FD_ISSET(sock, &fdSet)) {
+                bytesRecved = recvfrom(sock,       // сокет
+                                       recvBuffer, // указатель на буфер для приема данных
+                                       bufferSize, // размер буфера
+                                       0,          // флаги
+                                       (SOCKADDR *) &fromAddr, // указатель на адрес источника
+                                       &addrLen); // указатель на длину структуры адреса источника
+                recved = true;
+                if (bytesRecved == SOCKET_ERROR && WSAGetLastError() != WSAEMSGSIZE) {
+                    cerr << "Ошибка select: " << WSAGetLastError() << endl;
+                    success.push_back(false);
+                    delete[] recvBuffer;
+                    continue;
+                }
             }
         }
 
@@ -459,5 +461,5 @@ unsigned short calculateChecksum(unsigned short *buffer, int size)
 
 bool operator<(const GUID &a, const GUID &b)
 {
-    return memcmp(&a, &b, sizeof(_GUID)) < 0;
+    return memcmp(&a, &b, sizeof(GUID)) < 0;
 }

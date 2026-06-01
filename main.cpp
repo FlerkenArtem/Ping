@@ -136,13 +136,37 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
     unsigned long mode = 1;
     ioctlsocket(sock, FIONBIO, &mode);
 
+    /// Задание таймаутов отправки и получения
+    int sendTimeout = 1000;
+    int sendTimeoutRes = setsockopt(sock,
+                                    SOL_SOCKET,
+                                    SO_SNDTIMEO,
+                                    (char *) &sendTimeout,
+                                    sizeof(sendTimeout));
+    if (sendTimeoutRes == SOCKET_ERROR) {
+        cerr << "Ошибка задания таймаута сокета на отправку.";
+        return INVALID_SOCKET;
+    }
+
+    int recvTimeout = 3000;
+    int recvTimeoutRes = setsockopt(sock,
+                                    SOL_SOCKET,
+                                    SO_RCVTIMEO,
+                                    (char *) &recvTimeout,
+                                    sizeof(recvTimeout));
+    if (recvTimeoutRes == SOCKET_ERROR) {
+        cerr << "Ошибка задания таймаута сокета на получение.";
+        return INVALID_SOCKET;
+    }
+
     /// Создание словаря guids, который содержит структуру содержащую:
-    /// оригинальный и полученный GUID,
-    /// статус отправки и получения для каждого GUID,
-    /// время отправки и получения для каждого GUID.
+    /// полученный GUID,
+    /// время отправки и получения GUID.
     map<GUID, packData> guids;
 
+    // Последний обработанный GUID
     GUID lastGuid;
+
     /// Цикл отправки и приема пакетов
     for (int i = 0; i < steps;) {
         // Формирование флагов для определения,
@@ -226,19 +250,16 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
 
         if (selectRes == SOCKET_ERROR) {
             cerr << "Ошибка select: " << WSAGetLastError() << endl;
+            recved = true;
             delete[] recvBuffer;
-            continue;
         }
 
         if (selectRes == 0) {
-            cerr << "Истек таймаут ожидаения пакета" << endl;
-            continue;
+            cerr << "Истек таймаут ожидаения пакета." << endl;
+            recved = true;
         }
 
-        time_point<high_resolution_clock> recvStartTime;
-
         if (FD_ISSET(sock, &fdSet)) {
-            recvStartTime = high_resolution_clock::now();
             bytesRecved = recvfrom(sock,                   // сокет
                                    recvBuffer,             // указатель на буфер для приема данных
                                    bufferSize,             // размер буфера
@@ -256,15 +277,6 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         // Время принятия пакета
         guids[origGuid].recvTime = high_resolution_clock::now();
 
-        // Время, за которое был получен пакет
-        duration<double, milli> recvDiff = guids[origGuid].recvTime - recvStartTime;
-
-        // Обработка времени получения более 3 секунд
-        if (recvDiff > 3s) {
-            cerr << "Истек таймаут ожидаения пакета" << endl;
-            continue;
-        }
-
         // Разница
         duration<double, milli> diff = guids[origGuid].recvTime - guids[origGuid].sendTime;
 
@@ -275,7 +287,6 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             if ((unsigned int) bytesRecved < ipHeaderLen + sizeof(icmpPacket)) {
                 cerr << "Ошибка: Слишком малый размер полученных данных.";
                 delete[] recvBuffer;
-                continue;
             }
             icmpPacket *recvPack = (icmpPacket *) (recvBuffer + ipHeaderLen);
 
@@ -286,84 +297,84 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
 
                 // Сравнение оригинального и полученного GUID
                 if (IsEqualGUID(origGuid, guids[origGuid].recvedGuid)) {
-                    cout << "Успешное получение (" << diff.count() << " мс)" << endl;
+                    cout << "Успешное получение (" << diff.count() << " мс)." << endl;
                 } else {
-                    cerr << "Получен чужой пакет";
+                    cerr << "Получен чужой пакет.";
                 }
             }
             // Обработка ошибок
             else if (recvPack->header.type == 3) {
                 cerr << "Ошибка: Адресат недостижим.\t";
                 if (recvPack->header.code == 0) {
-                    cerr << "Сеть недоступна";
+                    cerr << "Сеть недоступна.";
                 } else if (recvPack->header.code == 1) {
-                    cerr << "Узел недоступен";
+                    cerr << "Узел недоступен.";
                 } else if (recvPack->header.code == 2) {
-                    cerr << "Протокол недоступен";
+                    cerr << "Протокол недоступен.";
                 } else if (recvPack->header.code == 3) {
-                    cerr << "Порт недоступен";
+                    cerr << "Порт недоступен.";
                 } else if (recvPack->header.code == 4) {
-                    cerr << "Необходима фрагментация, но не задан бит ее запрета";
+                    cerr << "Необходима фрагментация, но не задан бит ее запрета.";
                 } else if (recvPack->header.code == 5) {
-                    cerr << "Ошибка на исходном маршруте";
+                    cerr << "Ошибка на исходном маршруте.";
                 } else if (recvPack->header.code == 6) {
-                    cerr << "Сеть адресата неизвестна";
+                    cerr << "Сеть адресата неизвестна.";
                 } else if (recvPack->header.code == 7) {
-                    cerr << "Узел адресата неизвестен";
+                    cerr << "Узел адресата неизвестен.";
                 } else if (recvPack->header.code == 8) {
-                    cerr << "Исходный узел изолирован";
+                    cerr << "Исходный узел изолирован.";
                 } else if (recvPack->header.code == 9) {
-                    cerr << "Сеть адресата административно изолирована";
+                    cerr << "Сеть адресата административно изолирована.";
                 } else if (recvPack->header.code == 10) {
-                    cerr << "Узел адресата административно изолирован";
+                    cerr << "Узел адресата административно изолирован.";
                 } else if (recvPack->header.code == 11) {
-                    cerr << "Сеть недоступна для TOS";
+                    cerr << "Сеть недоступна для TOS.";
                 } else if (recvPack->header.code == 12) {
-                    cerr << "Узел недоступен для TOS";
+                    cerr << "Узел недоступен для TOS.";
                 } else if (recvPack->header.code == 13) {
-                    cerr << "Связь административно запрещена фильтрацией";
+                    cerr << "Связь административно запрещена фильтрацией.";
                 } else if (recvPack->header.code == 14) {
-                    cerr << "Нарушение приоритета узлов";
+                    cerr << "Нарушение приоритета узлов.";
                 } else if (recvPack->header.code == 15) {
-                    cerr << "Пренебрежение приоритетом узлов";
+                    cerr << "Пренебрежение приоритетом узлов.";
                 } else {
-                    cerr << "Ошибка";
+                    cerr << "Ошибка.";
                 }
             } else if (recvPack->header.type == 4 && recvPack->header.code == 0) {
                 cerr << "Ошибка.\tПодавление отправителя.";
             } else if (recvPack->header.type == 5) {
                 cerr << "Ошибка: Перенаправление.\t";
                 if (recvPack->header.code == 0) {
-                    cerr << "Перенаправление для сети";
+                    cerr << "Перенаправление для сети.";
                 } else if (recvPack->header.code == 1) {
-                    cerr << "Перенаправление на узел";
+                    cerr << "Перенаправление на узел.";
                 } else if (recvPack->header.code == 2) {
-                    cerr << "Перенаправление на TOS и сеть";
+                    cerr << "Перенаправление на TOS и сеть.";
                 } else if (recvPack->header.code == 3) {
-                    cerr << "Перенаправление на TOS и узел";
+                    cerr << "Перенаправление на TOS и узел.";
                 } else {
-                    cerr << "Ошибка";
+                    cerr << "Ошибка.";
                 }
             } else if (recvPack->header.type == 11) {
                 cerr << "Ошибка: Время превышено.\t";
                 if (recvPack->header.code == 0) {
-                    cerr << "TTL в ходе транзита равен 0";
+                    cerr << "TTL в ходе транзита равен 0.";
                 } else if (recvPack->header.code == 1) {
-                    cerr << "TTL в ходе повторной сборки равен 0";
+                    cerr << "TTL в ходе повторной сборки равен 0.";
                 } else {
-                    cerr << "Ошибка";
+                    cerr << "Ошибка.";
                 }
             } else if (recvPack->header.type == 12) {
                 cerr << "Ошибка: Проблема параметра.\t";
                 if (recvPack->header.code == 0) {
-                    cerr << "Неверный заголовок IP";
+                    cerr << "Неверный заголовок IP.";
                 } else if (recvPack->header.code == 1) {
-                    cerr << "Отсутствует требуемый параметр";
+                    cerr << "Отсутствует требуемый параметр.";
                 } else {
-                    cerr << "Ошибка";
+                    cerr << "Ошибка.";
                 }
             } else {
-                cerr << "Ошибка";
+                cerr << "Ошибка.";
             }
 
             recved = true;

@@ -152,7 +152,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
     vector<bool> success;
 
     // Последний обработанный GUID
-    GUID lastGuid;
+    GUID lastGuid{};
 
     /// Цикл отправки и приема пакетов
     for (int i = 0; i < steps;) {
@@ -168,7 +168,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             closesocket(sock);
             return 1;
         } else {
-            packData data;
+            packData data{};
             guids[origGuid] = data;
             created = true;
         }

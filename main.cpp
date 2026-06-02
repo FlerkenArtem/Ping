@@ -427,12 +427,12 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         int trueCnt = count(success.begin(), success.end(), true);
         int falseCnt = count(success.begin(), success.end(), false);
 
-        double falsePercent = (falseCnt / success.size()) * 100;
+        double falsePercent = ((double) falseCnt / (double) success.size()) * 100.0;
 
         cout << "Пакетов отправлено: " << cnt << endl
              << "Успешно: " << trueCnt << endl
              << "С ошибкой: " << falseCnt << endl
-             << "Процент ошибок: " << falsePercent << " %" << endl
+             << "Процент ошибок: " << (int) falsePercent << " %" << endl
              << endl;
     } else {
         cerr << "Ошибка при формировании статистики по отправке пакетов. "

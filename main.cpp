@@ -140,31 +140,6 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
     unsigned long mode = 1;
     ioctlsocket(sock, FIONBIO, &mode);
 
-    /// Задание таймаутов отправки и получения
-    int sendTimeout = 1000;
-    int sendTimeoutRes = setsockopt(sock,
-                                    SOL_SOCKET,
-                                    SO_SNDTIMEO,
-                                    (char *) &sendTimeout,
-                                    sizeof(sendTimeout));
-    if (sendTimeoutRes == SOCKET_ERROR) {
-        cerr << "Ошибка задания таймаута сокета на отправку.";
-        closesocket(sock);
-        return INVALID_SOCKET;
-    }
-
-    int recvTimeout = 3000;
-    int recvTimeoutRes = setsockopt(sock,
-                                    SOL_SOCKET,
-                                    SO_RCVTIMEO,
-                                    (char *) &recvTimeout,
-                                    sizeof(recvTimeout));
-    if (recvTimeoutRes == SOCKET_ERROR) {
-        cerr << "Ошибка задания таймаута сокета на получение.";
-        closesocket(sock);
-        return INVALID_SOCKET;
-    }
-
     /// Создание словаря guids, который содержит структуру содержащую:
     /// полученный GUID,
     /// время отправки и получения GUID.

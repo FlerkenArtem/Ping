@@ -132,6 +132,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
     if (sock == INVALID_SOCKET) {
         cerr << "Ошибка создания сокета: " << WSAGetLastError() << endl;
         WSACleanup();
+        closesocket(sock);
         return INVALID_SOCKET;
     }
 
@@ -148,6 +149,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                                     sizeof(sendTimeout));
     if (sendTimeoutRes == SOCKET_ERROR) {
         cerr << "Ошибка задания таймаута сокета на отправку.";
+        closesocket(sock);
         return INVALID_SOCKET;
     }
 
@@ -159,6 +161,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                                     sizeof(recvTimeout));
     if (recvTimeoutRes == SOCKET_ERROR) {
         cerr << "Ошибка задания таймаута сокета на получение.";
+        closesocket(sock);
         return INVALID_SOCKET;
     }
 

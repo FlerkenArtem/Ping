@@ -265,10 +265,21 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             recved = true;
             success.push_back(false);
             delete[] recvBuffer;
+            if (created && sended && recved) {
+                i++;
+                lastGuid = origGuid;
+            }
+            continue;
         } else if (selectRes == 0) {
             cerr << "Истек таймаут ожидаения пакета." << endl;
             success.push_back(false);
             recved = true;
+            delete[] recvBuffer;
+            if (created && sended && recved) {
+                i++;
+                lastGuid = origGuid;
+            }
+            continue;
         } else if (selectRes > 0) {
             if (FD_ISSET(sock, &fdSet)) {
                 bytesRecved = recvfrom(sock,       // сокет
@@ -282,11 +293,20 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                     cerr << "Ошибка select: " << WSAGetLastError() << endl;
                     success.push_back(false);
                     delete[] recvBuffer;
+                    if (created && sended && recved) {
+                        i++;
+                        lastGuid = origGuid;
+                    }
                     continue;
-                } else if (bytesRecved == WSAETIMEDOUT) {
+                } else if (bytesRecved == SOCKET_ERROR && WSAGetLastError() == WSAETIMEDOUT) {
                     cerr << "Истек таймаут ожидаения пакета." << endl;
-                    success.push_back(false);
                     recved = true;
+                    success.push_back(false);
+                    if (created && sended && recved) {
+                        i++;
+                        lastGuid = origGuid;
+                    }
+                    continue;
                 }
             }
         }
@@ -307,6 +327,13 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                         "Должны быть получены данные, содержащие IP-заголовок "
                         "и ICMP-пакет";
                 delete[] recvBuffer;
+                success.push_back(false);
+                recved = true;
+                if (created && sended && recved) {
+                    i++;
+                    lastGuid = origGuid;
+                }
+                continue;
             }
             icmpPacket *recvPack = (icmpPacket *) (recvBuffer + ipHeaderLen);
 
@@ -417,7 +444,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         }
     }
 
-    /// Вывод статискики
+    /// Вывод статистики
     cout << endl << "Статистика" << endl << endl;
 
     if (success.size() == (unsigned long long) steps) {

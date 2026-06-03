@@ -12,6 +12,23 @@
 using namespace std;
 using namespace std::chrono;
 
+/// Заголовок IP
+struct ipHeader
+{
+    unsigned int len : 4;
+    unsigned int version : 4;
+    unsigned char tos;
+    unsigned short totalLen;
+    unsigned short id;
+    unsigned short flags;
+    unsigned char ttl;
+    unsigned char proto;
+    unsigned short checkSum;
+
+    unsigned int srcIp;
+    unsigned int destIp;
+};
+
 /// Заголовок ICMP
 struct icmpHeader
 {
@@ -161,7 +178,10 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         // что итерацию цикла требуется завершить
         bool created = false;
         bool sended = false;
+        bool sendError = false;
         bool recved = false;
+        bool recvError = false;
+        bool timeoutEnded = false;
 
         GUID origGuid;
         if (!(CoCreateGuid(&origGuid) == S_OK)) {
@@ -204,12 +224,13 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         // Обработка ошибок отправки
         if (res == SOCKET_ERROR) {
             cerr << "Ошибка отправки: " << WSAGetLastError() << endl;
+            sendError = true;
         } else {
             cout << "Пакет отправлен." << endl;
+            sended = true;
         }
 
         guids[origGuid].sendTime = high_resolution_clock::now();
-        sended = true;
 
         // Минимальная длина IP-заголовка
         int ipHeaderLen = 20;
@@ -231,12 +252,16 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
 
         // Попытка получения данных до тех пор, пока не будет найден отправленный пакет
         while (!found) {
+            recved = false;
+            recvError = false;
+            timeoutEnded = false;
+
             // Разница между началом получения и текущей попыткой
             auto recvWaitDiff = high_resolution_clock::now() - recvWaitStart;
             if (recvWaitDiff > 3s) {
                 cerr << "Истек таймаут ожидаения пакета." << endl;
                 success.push_back(false);
-                recved = true;
+                timeoutEnded = true;
                 break;
             }
 
@@ -259,6 +284,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
 
             // Ошибка select
             if (selectRes <= 0) {
+                recvError = true;
                 continue;
             }
 
@@ -288,6 +314,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             if (recvPack->header.type != 0) {
                 // Вывод ошибок
                 errors(recvPack->header.type, recvPack->header.code);
+                recvError = true;
                 continue;
             }
 
@@ -298,6 +325,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
 
             // Чужой пакет
             if (it == guids.end()) {
+                recvError = true;
                 continue;
             }
 
@@ -318,7 +346,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         // Очистка памяти
         delete[] recvBuffer;
 
-        if (created && sended && recved) {
+        if ((created && sended && (recved || recvError || timeoutEnded)) || (created && sendError)) {
             i++;
             lastGuid = origGuid;
         }

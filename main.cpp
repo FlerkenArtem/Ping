@@ -269,6 +269,12 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                                        &addrLen); // указатель на длину структуры адреса источника
             }
 
+            // Проверка на то, что ответ пришел с целевого узла
+            if (fromAddr.sin_addr.s_addr != destAddr.sin_addr.s_addr) {
+                continue;
+            }
+
+            // Проверка что ответ содержит данные
             if (bytesRecved <= 0) {
                 continue;
             }

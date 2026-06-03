@@ -127,7 +127,7 @@ int getSteps()
 
 unsigned long long ping(sockaddr_in destAddr, int steps)
 {
-    /// Создание сокета
+    // Создание сокета
     SOCKET sock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
     if (sock == INVALID_SOCKET) {
         cerr << "Ошибка создания сокета: " << WSAGetLastError() << endl;
@@ -136,13 +136,11 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         return INVALID_SOCKET;
     }
 
-    /// Перевод сокета в неблокирующий режим
+    // Перевод сокета в неблокирующий режим
     unsigned long mode = 1;
     ioctlsocket(sock, FIONBIO, &mode);
 
-    /// Создание словаря guids, который содержит структуру содержащую:
-    /// полученный GUID,
-    /// время отправки и получения GUID.
+    // Создание словаря guids
     map<GUID, packData> guids;
 
     // Вектор времени ответа
@@ -154,7 +152,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
     // Последний обработанный GUID
     GUID lastGuid{};
 
-    /// Цикл отправки и приема пакетов
+    // Цикл отправки и приема пакетов
     for (int i = 0; i < steps;) {
         // Формирование флагов для определения,
         // что итерацию цикла требуется завершить
@@ -210,8 +208,11 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         guids[origGuid].sendTime = high_resolution_clock::now();
         sended = true;
 
-        // Установка размера буфера: IPv4-заголовок (20) + ICMP-пакет
-        const int bufferSize = 20 + sizeof(icmpPacket);
+        // Минимальная длина IP-заголовка
+        int ipHeaderLen = 20;
+
+        // Установка размера буфера: IPv4-заголовок + ICMP-пакет
+        const int bufferSize = ipHeaderLen + sizeof(icmpPacket);
 
         // Создание буфера
         char *recvBuffer = new char[bufferSize];
@@ -219,7 +220,10 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         // Длина адреса
         int addrLen = sizeof(destAddr);
 
+        // Флаг нахождения данных
         bool found = false;
+
+        // Время начала приема данных
         time_point<high_resolution_clock> recvWaitStart = high_resolution_clock::now();
 
         // Попытка получения данных до тех пор, пока не будет найден отправленный пакет
@@ -248,7 +252,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
 
             int bytesRecved = 0;
 
-            sockaddr_in fromAddr;
+            sockaddr_in fromAddr{};
 
             // Ошибка select
             if (selectRes <= 0) {
@@ -269,16 +273,89 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                 continue;
             }
 
-            // Минимальная длина IP-заголовка
-            int ipHeaderLen = 20;
             icmpPacket *recvPack = (icmpPacket *) (recvBuffer + ipHeaderLen);
 
-            GUID recvGuid = recvPack->data;
-
-            // Типы кроме 0 игнорируются
+            // Типы кроме 0 пропускаются, выводится ошибка
             if (recvPack->header.type != 0) {
+                if (recvPack->header.type == 3) {
+                    cerr << "Ошибка: Адресат недостижим.\t";
+                    if (recvPack->header.code == 0) {
+                        cerr << "Сеть недоступна.";
+                    } else if (recvPack->header.code == 1) {
+                        cerr << "Узел недоступен.";
+                    } else if (recvPack->header.code == 2) {
+                        cerr << "Протокол недоступен.";
+                    } else if (recvPack->header.code == 3) {
+                        cerr << "Порт недоступен.";
+                    } else if (recvPack->header.code == 4) {
+                        cerr << "Необходима фрагментация, но не задан бит ее запрета.";
+                    } else if (recvPack->header.code == 5) {
+                        cerr << "Ошибка на исходном маршруте.";
+                    } else if (recvPack->header.code == 6) {
+                        cerr << "Сеть адресата неизвестна.";
+                    } else if (recvPack->header.code == 7) {
+                        cerr << "Узел адресата неизвестен.";
+                    } else if (recvPack->header.code == 8) {
+                        cerr << "Исходный узел изолирован.";
+                    } else if (recvPack->header.code == 9) {
+                        cerr << "Сеть адресата административно изолирована.";
+                    } else if (recvPack->header.code == 10) {
+                        cerr << "Узел адресата административно изолирован.";
+                    } else if (recvPack->header.code == 11) {
+                        cerr << "Сеть недоступна для TOS.";
+                    } else if (recvPack->header.code == 12) {
+                        cerr << "Узел недоступен для TOS.";
+                    } else if (recvPack->header.code == 13) {
+                        cerr << "Связь административно запрещена фильтрацией.";
+                    } else if (recvPack->header.code == 14) {
+                        cerr << "Нарушение приоритета узлов.";
+                    } else if (recvPack->header.code == 15) {
+                        cerr << "Пренебрежение приоритетом узлов.";
+                    } else {
+                        cerr << "Ошибка. Код: " << recvPack->header.code;
+                    }
+                } else if (recvPack->header.type == 4 && recvPack->header.code == 0) {
+                    cerr << "Ошибка.\tПодавление отправителя.";
+                } else if (recvPack->header.type == 5) {
+                    cerr << "Ошибка: Перенаправление.\t";
+                    if (recvPack->header.code == 0) {
+                        cerr << "Перенаправление для сети.";
+                    } else if (recvPack->header.code == 1) {
+                        cerr << "Перенаправление на узел.";
+                    } else if (recvPack->header.code == 2) {
+                        cerr << "Перенаправление на TOS и сеть.";
+                    } else if (recvPack->header.code == 3) {
+                        cerr << "Перенаправление на TOS и узел.";
+                    } else {
+                        cerr << "Ошибка. Код: " << recvPack->header.code;
+                    }
+                } else if (recvPack->header.type == 11) {
+                    cerr << "Ошибка: Время превышено.\t";
+                    if (recvPack->header.code == 0) {
+                        cerr << "TTL в ходе транзита равен 0.";
+                    } else if (recvPack->header.code == 1) {
+                        cerr << "TTL в ходе повторной сборки равен 0.";
+                    } else {
+                        cerr << "Ошибка. Код: " << recvPack->header.code;
+                    }
+                } else if (recvPack->header.type == 12) {
+                    cerr << "Ошибка: Проблема параметра.\t";
+                    if (recvPack->header.code == 0) {
+                        cerr << "Неверный заголовок IP.";
+                    } else if (recvPack->header.code == 1) {
+                        cerr << "Отсутствует требуемый параметр.";
+                    } else {
+                        cerr << "Ошибка. Код: " << recvPack->header.code;
+                    }
+                } else {
+                    cerr << "Ошибка. Тип: " << recvPack->header.type
+                         << ", код: " << recvPack->header.code;
+                }
+
                 continue;
             }
+
+            GUID recvGuid = recvPack->data;
 
             // Итератор по map guids по значению полученного Guid
             auto it = guids.find(recvGuid);
@@ -311,7 +388,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         }
     }
 
-    /// Вывод статистики
+    // Вывод статистики
     cout << endl << "Статистика" << endl << endl;
 
     if (success.size() == (unsigned long long) steps) {

@@ -13,10 +13,11 @@ using namespace std;
 using namespace std::chrono;
 
 /// Заголовок IP
+#pragma pack(push, 1)
 struct ipHeader
 {
-    unsigned int len : 4;
-    unsigned int version : 4;
+    unsigned char len : 4;
+    unsigned char version : 4;
     unsigned char tos;
     unsigned short totalLen;
     unsigned short id;
@@ -28,21 +29,26 @@ struct ipHeader
     unsigned int srcIp;
     unsigned int destIp;
 };
+#pragma pack(pop)
 
 /// Заголовок ICMP
+#pragma pack(push, 1)
 struct icmpHeader
 {
     unsigned char type;
     unsigned char code;
     unsigned short checkSum;
 };
+#pragma pack(pop)
 
 /// ICMP-пакет
+#pragma pack(push, 1)
 struct icmpPacket
 {
     icmpHeader header;
     GUID data;
 };
+#pragma pack(pop)
 
 /// Структура с дополнительными данными о пакете
 struct packData
@@ -71,7 +77,7 @@ bool operator<(const GUID &guid1, const GUID &guid2);
 void errors(unsigned char type, unsigned char code);
 
 int main()
-{
+{    
     system("chcp 65001 > nul");
     setlocale(LC_ALL, ".UTF8");
 
@@ -233,10 +239,10 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         guids[origGuid].sendTime = high_resolution_clock::now();
 
         // Минимальная длина IP-заголовка
-        int ipHeaderLen = 20;
+        int ipHeaderMinLen = sizeof(ipHeader);
 
         // Установка размера буфера: IPv4-заголовок + ICMP-пакет
-        const int bufferSize = ipHeaderLen + sizeof(icmpPacket);
+        const int bufferSize = ipHeaderMinLen + sizeof(icmpPacket);
 
         // Создание буфера
         char *recvBuffer = new char[bufferSize];
@@ -308,6 +314,14 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                 continue;
             }
 
+            ipHeader *ipHdr = (ipHeader *) recvBuffer;
+            int ipHeaderLen = ipHdr->len * 4;
+            int icmpHeaderMinLen = sizeof(icmpHeader);
+
+            if (bytesRecved < ipHeaderLen + icmpHeaderMinLen) {
+                continue;
+            }
+
             icmpPacket *recvPack = (icmpPacket *) (recvBuffer + ipHeaderLen);
 
             // Типы кроме 0 пропускаются
@@ -333,7 +347,9 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
 
             duration<double, milli> diff = it->second.recvTime - it->second.sendTime;
 
-            cout << "Успешное получение (" << diff.count() << " мс)." << endl;
+            int ttl = ipHdr->ttl;
+
+            cout << "Успешное получение (" << diff.count() << " мс, TTL = " << ttl << ")." << endl;
 
             success.push_back(true);
             timeDiff.push_back(diff.count());

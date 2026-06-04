@@ -51,12 +51,14 @@ struct icmpPacket
 #pragma pack(pop)
 
 /// Структура с дополнительными данными о пакете
+#pragma pack(push, 1)
 struct packData
 {
     GUID recvedGuid;
     time_point<high_resolution_clock> sendTime;
     time_point<high_resolution_clock> recvTime;
 };
+#pragma pack(pop)
 
 /// Подключение сокета
 optional<sockaddr_in> connectAddr();
@@ -314,14 +316,22 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                 continue;
             }
 
+            // Получение IP-заголовка из буфера
             ipHeader *ipHdr = (ipHeader *) recvBuffer;
-            int ipHeaderLen = ipHdr->len * 4;
-            int icmpHeaderMinLen = sizeof(icmpHeader);
 
-            if (bytesRecved < ipHeaderLen + icmpHeaderMinLen) {
+            // Вычисление реальной длины IP-заголовка:
+            // поле len обозначает длину IP-заголовка в 32 битных словах,
+            // находим длину в байтах
+            int ipHeaderLen = ipHdr->len * 4;
+
+            // Проверка по длине,
+            // что полученный пакет содержит IP-заголовок
+            // и ICMP заголовок
+            if (bytesRecved < ipHeaderLen + (int) sizeof(icmpHeader)) {
                 continue;
             }
 
+            // Получение ICMP пакета
             icmpPacket *recvPack = (icmpPacket *) (recvBuffer + ipHeaderLen);
 
             // Типы кроме 0 пропускаются
@@ -332,6 +342,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                 continue;
             }
 
+            // Получение GUID из полученного пакета
             GUID recvGuid = recvPack->data;
 
             // Итератор по map guids по значению полученного Guid
@@ -343,10 +354,13 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                 continue;
             }
 
+            // Получение времени получения пакета
             it->second.recvTime = high_resolution_clock::now();
 
+            // Вычисление промежутка времени между отправкой и получением пакета
             duration<double, milli> diff = it->second.recvTime - it->second.sendTime;
 
+            // Получение TTL
             int ttl = ipHdr->ttl;
 
             cout << "Успешное получение (" << diff.count() << " мс, TTL = " << ttl << ")." << endl;

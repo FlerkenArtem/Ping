@@ -280,8 +280,8 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
 
             // Таймаут функции select
             timeval timeout;
-            timeout.tv_sec = 0;
-            timeout.tv_usec = 100000;
+            timeout.tv_sec = 3;
+            timeout.tv_usec = 0;
 
             // select
             int selectRes = select(0, &fdSet, NULL, NULL, &timeout);

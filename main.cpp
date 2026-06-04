@@ -376,7 +376,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         // Очистка памяти
         delete[] recvBuffer;
 
-        if ((created && sended && (recved || recvError || timeoutEnded)) || (created && sendError)) {
+        if (created && ((sended && (recved || recvError || timeoutEnded)) || sendError)) {
             i++;
             lastGuid = origGuid;
         }

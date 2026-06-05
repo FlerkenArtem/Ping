@@ -51,7 +51,7 @@ struct packData
     GUID recvedGuid;
     time_point<high_resolution_clock> sendTime;
     time_point<high_resolution_clock> recvTime;
-    bool processed;
+    bool recved = false;
 };
 #pragma pack(pop)
 
@@ -169,13 +169,12 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
     // Вектор времени ответа
     vector<double> timeDiff;
 
-    // Вектор успеха или неудач при получени
-    vector<bool> success;
-
     // Последний отправленный GUID
     GUID lastSendedGuid{};
 
     GUID lastRecvedGuid{};
+
+    vector<bool> processed{};
 
     bool end = false;
     int i = 0;
@@ -340,13 +339,14 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                             // Вывод ошибок
                             errors(errorPack->header.type, errorPack->header.code);
 
-                            guids[recvGuid].processed = true;
+                            processed.push_back(true);
 
                             continue;
                         }
 
                         // Получение GUID из полученного пакета
                         GUID recvGuid = recvPack->data;
+                        guids[recvGuid].recved = true;
 
                         // Итератор по map guids по значению полученного Guid
                         auto it = guids.find(recvGuid);
@@ -368,26 +368,23 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                         cout << "Успешное получение (" << diff.count() << " мс, TTL = " << ttl
                              << ")." << endl;
 
-                        guids[recvGuid].processed = true;
+                        processed.push_back(true);
 
-                        success.push_back(true);
                         timeDiff.push_back(diff.count());
                     }
                 } while (recvError != WSAEWOULDBLOCK);
             }
         }
 
+        high_resolution_clock::duration recvDiff = high_resolution_clock::now() - recvStart;
+        if (recvDiff >= 3s) {
+        }
+
         // Очистка памяти
         delete[] recvBuffer;
 
         if (guids.size() == (unsigned long long) steps) {
-            // Все пакеты обработаны
-            bool allProcessed = all_of(guids.begin(),
-                                       guids.end(),
-                                       [](const pair<const GUID, packData> &pair) {
-                                           return pair.second.processed;
-                                       });
-            if (allProcessed) {
+            if (count(processed.begin(), processed.end(), true)) {
                 end = true;
             }
         }
@@ -398,12 +395,14 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
     // Вывод статистики
     cout << endl << "Статистика" << endl << endl;
 
-    if (success.size() == (unsigned long long) steps) {
-        int cnt = success.size();
-        int trueCnt = count(success.begin(), success.end(), true);
-        int falseCnt = count(success.begin(), success.end(), false);
+    if (guids.size() == (unsigned long long) steps) {
+        int cnt = guids.size();
+        int trueCnt = count_if(guids.begin(), guids.end(), [](const auto &pair) {
+            return pair.second.recved;
+        });
+        int falseCnt = cnt - trueCnt;
 
-        double falsePercent = ((double) falseCnt / (double) success.size()) * 100.0;
+        double falsePercent = ((double) falseCnt / (double) cnt) * 100.0;
 
         cout << "Пакетов отправлено: " << cnt << endl
              << "Успешно: " << trueCnt << endl

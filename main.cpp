@@ -376,13 +376,17 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             }
         }
 
+        // Обработка истечения таймаута
         high_resolution_clock::duration recvDiff = high_resolution_clock::now() - recvStart;
         if (recvDiff >= 3s) {
+            cerr << "Таймаут истек";
+            processed.push_back(false);
         }
 
         // Очистка памяти
         delete[] recvBuffer;
 
+        // Завершение цикла
         if (guids.size() == (unsigned long long) steps) {
             if (count(processed.begin(), processed.end(), true)) {
                 end = true;

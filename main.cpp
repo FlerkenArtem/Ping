@@ -29,29 +29,23 @@ struct ipHeader
     unsigned int srcIp;
     unsigned int destIp;
 };
-#pragma pack(pop)
 
 /// Заголовок ICMP
-#pragma pack(push, 1)
 struct icmpHeader
 {
     unsigned char type;
     unsigned char code;
     unsigned short checkSum;
 };
-#pragma pack(pop)
 
 /// ICMP-пакет
-#pragma pack(push, 1)
 struct icmpPacket
 {
     icmpHeader header;
     GUID data;
 };
-#pragma pack(pop)
 
 /// Структура с дополнительными данными о пакете
-#pragma pack(push, 1)
 struct packData
 {
     GUID recvedGuid;
@@ -273,6 +267,10 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                 break;
             }
 
+            // ttl для отладки
+            // int ttlOpt = 1;
+            // setsockopt(sock, IPPROTO_IP, IP_TTL, (const char *) &ttlOpt, sizeof(ttlOpt));
+
             // Структура fd_set для хранения сокетов
             fd_set fdSet;
             FD_ZERO(&fdSet);      // Очистка
@@ -335,9 +333,24 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             icmpPacket *recvPack = (icmpPacket *) (recvBuffer + ipHeaderLen);
 
             // Типы кроме 0 пропускаются
-            if (recvPack->header.type != 0) {
+            if (recvPack->header.type != 0 && recvPack->header.code != 0) {
+                // Формирование ICMP-сообщения об ошибке
+                icmpPacket *errorPack = (icmpPacket *) (recvBuffer + ipHeaderLen + 8);
+
+                // Получение GUID из полученного пакета
+                GUID recvGuid = recvPack->data;
+
+                // Итератор по map guids по значению полученного Guid
+                auto it = guids.find(recvGuid);
+
+                // Чужой пакет
+                if (it == guids.end()) {
+                    recvError = true;
+                    continue;
+                }
+
                 // Вывод ошибок
-                errors(recvPack->header.type, recvPack->header.code);
+                errors(errorPack->header.type, errorPack->header.code);
                 recvError = true;
                 continue;
             }

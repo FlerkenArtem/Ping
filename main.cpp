@@ -188,7 +188,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         }
 
         // Отправка GUID
-        if (i == 0 || iterationSendDiff >= 1s) {
+        if ((i == 0 || iterationSendDiff >= 1s) && i < steps) {
             // Формирование GUID
             GUID origGuid;
             if (!(CoCreateGuid(&origGuid) == S_OK)) {
@@ -276,6 +276,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                 do {
                     duration<double, milli> recvTimeout = high_resolution_clock::now() - recvStart;
                     if (recvTimeout > 3s) {
+                        break;
                     }
 
                     bytesRecved = recvfrom(sock,       // сокет
@@ -346,7 +347,8 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
 
                         // Получение GUID из полученного пакета
                         GUID recvGuid = recvPack->data;
-                        guids[recvGuid].recved = true;
+
+                        lastRecvedGuid = recvGuid;
 
                         // Итератор по map guids по значению полученного Guid
                         auto it = guids.find(recvGuid);
@@ -358,6 +360,8 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
 
                         // Получение времени получения пакета
                         it->second.recvTime = high_resolution_clock::now();
+
+                        it->second.recved = true;
 
                         // Вычисление промежутка времени между отправкой и получением пакета
                         duration<double, milli> diff = it->second.recvTime - it->second.sendTime;
@@ -383,15 +387,15 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             processed.push_back(false);
         }
 
-        // Очистка памяти
-        delete[] recvBuffer;
-
         // Завершение цикла
-        if (guids.size() == (unsigned long long) steps) {
+        if (processed.size() == (unsigned long long) steps) {
             if (count(processed.begin(), processed.end(), true)) {
                 end = true;
             }
         }
+
+        // Очистка памяти
+        delete[] recvBuffer;
 
         i++;
     }

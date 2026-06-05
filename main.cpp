@@ -64,6 +64,9 @@ int getSteps();
 /// Выполнение Ping
 unsigned long long ping(sockaddr_in destAddr, int steps = 4);
 
+/// Вывод статистики
+void stats(map<GUID, packData> guids, vector<double> timeDiff, int steps);
+
 /// Расчет контрольной суммы
 unsigned short calculateChecksum(unsigned short *buffer, int size);
 
@@ -108,8 +111,8 @@ optional<sockaddr_in> connectAddr()
     cout << "Введите адрес: ";
     cin >> hostname;
 
-    struct addrinfo hints;
-    struct addrinfo *result = nullptr;
+    addrinfo hints;
+    addrinfo *result = nullptr;
 
     ZeroMemory(&hints, sizeof(hints));
     hints.ai_family = AF_INET; // IPv4
@@ -181,7 +184,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
 
     // Цикл отправки и приема пакетов
     while (!end) {
-        // Расчет времени между отоправкой
+        // Расчет времени между отправкой
         high_resolution_clock::duration iterationSendDiff;
         if (i != 0) {
             iterationSendDiff = high_resolution_clock::now() - guids[lastSendedGuid].sendTime;
@@ -238,7 +241,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         // Длина адреса
         int addrLen = sizeof(destAddr);
 
-        duration<double, milli> recvWaitDiff;
+        optional<duration<double, milli>> recvWaitDiff;
 
         if (i != 0) {
             // Разница между началом получения и текущей попыткой
@@ -247,7 +250,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
 
         auto recvStart = high_resolution_clock::now();
 
-        if (i == 0 || recvWaitDiff >= 3s) {
+        if (i == 0 || !recvWaitDiff.has_value() || recvWaitDiff >= 3s) {
             // Структура fd_set для хранения сокетов
             fd_set fdSet;
             FD_ZERO(&fdSet);      // Очистка
@@ -401,6 +404,15 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
     }
 
     // Вывод статистики
+    stats(guids, timeDiff, steps);
+
+    // Закрытие сокета
+    closesocket(sock);
+    return 0;
+}
+
+void stats(map<GUID, packData> guids, vector<double> timeDiff, int steps)
+{
     cout << endl << "Статистика" << endl << endl;
 
     if (guids.size() == (unsigned long long) steps) {
@@ -440,10 +452,6 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
              << endl
              << endl;
     }
-
-    // Закрытие сокета
-    closesocket(sock);
-    return 0;
 }
 
 unsigned short calculateChecksum(unsigned short *buffer, int size)

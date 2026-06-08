@@ -273,7 +273,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         sockaddr_in fromAddr{};
 
         // Ошибка select
-        if (selectRes <= 0) {
+        if (selectRes <= 0 && !allSended) {
             continue;
         }
 
@@ -380,7 +380,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         auto endTime = high_resolution_clock::now();
 
         for (auto &pair : guids) {
-            packData data = pair.second;
+            packData &data = pair.second;
 
             if (!data.recved && !data.timeout && !data.error && data.sended) {
                 if (endTime - data.sendTime >= 3s || data.recvTime.time_since_epoch().count() == 0) {

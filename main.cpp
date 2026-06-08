@@ -253,10 +253,6 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             lastSendedGuid = origGuid;
         }
 
-        // Настройка TTL
-        int ttl = 4;
-        setsockopt(sock, IPPROTO_IP, IP_TTL, (const char *) &ttl, sizeof(ttl));
-
         // Установка размера буфера: 56 байт
         const int bufferSize = 56;
 
@@ -285,6 +281,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
 
         // Ошибка select
         if (selectRes <= 0 && !allSended) {
+            delete[] recvBuffer;
             continue;
         }
 

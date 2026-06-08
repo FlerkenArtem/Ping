@@ -257,12 +257,8 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         int ttl = 4;
         setsockopt(sock, IPPROTO_IP, IP_TTL, (const char *) &ttl, sizeof(ttl));
 
-        // Минимальная длина IP-заголовка
-        int ipHeaderMinLen = sizeof(ipHeader);
-
-        // Установка размера буфера: IPv4-заголовок + ICMP-пакет
+        // Установка размера буфера: 56 байт
         const int bufferSize = 56;
-        //const int bufferSize = ipHeaderMinLen + sizeof(icmpPacket);
 
         // Создание буфера
         char *recvBuffer = new char[bufferSize];
@@ -310,11 +306,6 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                         return 1;
                     }
                 } else if (bytesRecved > 0) {
-                    // Проверка на то, что ответ пришел с целевого узла
-                    // if (fromAddr.sin_addr.s_addr != destAddr.sin_addr.s_addr) {
-                    //     continue;
-                    // }
-
                     // Проверка что ответ содержит данные
                     if (bytesRecved <= 0) {
                         continue;
@@ -350,7 +341,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                         memcpy(recvData.data(), errorPack.origData, 8);
                         errors(errorPack.icmpHdr.type, errorPack.icmpHdr.code);
 
-                        /*for (const auto &pair : guids) {
+                        for (const auto &pair : guids) {
                             GUID guid = pair.first;
 
                             // От исходного GUID получается часть равная 8 байтам,
@@ -367,7 +358,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                                 guids[guid].error = true;
                                 break;
                             }
-                        }*/
+                        }
                         continue;
                     }
 

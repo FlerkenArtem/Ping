@@ -253,16 +253,16 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             lastSendedGuid = origGuid;
         }
 
-        // // Настройка TTL
-        // int ttl = 4;
-        // setsockopt(sock, IPPROTO_IP, IP_TTL, (const char *) &ttl, sizeof(ttl));
+        // Настройка TTL
+        int ttl = 4;
+        setsockopt(sock, IPPROTO_IP, IP_TTL, (const char *) &ttl, sizeof(ttl));
 
         // Минимальная длина IP-заголовка
         int ipHeaderMinLen = sizeof(ipHeader);
 
         // Установка размера буфера: IPv4-заголовок + ICMP-пакет
-        // const int bufferSize = 72;
-        const int bufferSize = ipHeaderMinLen + sizeof(icmpPacket);
+        const int bufferSize = 56;
+        //const int bufferSize = ipHeaderMinLen + sizeof(icmpPacket);
 
         // Создание буфера
         char *recvBuffer = new char[bufferSize];
@@ -311,9 +311,9 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                     }
                 } else if (bytesRecved > 0) {
                     // Проверка на то, что ответ пришел с целевого узла
-                    if (fromAddr.sin_addr.s_addr != destAddr.sin_addr.s_addr) {
-                        continue;
-                    }
+                    // if (fromAddr.sin_addr.s_addr != destAddr.sin_addr.s_addr) {
+                    //     continue;
+                    // }
 
                     // Проверка что ответ содержит данные
                     if (bytesRecved <= 0) {
@@ -348,8 +348,9 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                         // Получение 8 байт данных
                         array<unsigned char, 8> recvData;
                         memcpy(recvData.data(), errorPack.origData, 8);
+                        errors(errorPack.icmpHdr.type, errorPack.icmpHdr.code);
 
-                        for (const auto &pair : guids) {
+                        /*for (const auto &pair : guids) {
                             GUID guid = pair.first;
 
                             // От исходного GUID получается часть равная 8 байтам,
@@ -366,7 +367,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                                 guids[guid].error = true;
                                 break;
                             }
-                        }
+                        }*/
                         continue;
                     }
 
@@ -521,8 +522,11 @@ bool operator<(const GUID &guid1, const GUID &guid2)
     return false;
 }
 
-void errors(unsigned char type, unsigned char code)
+void errors(unsigned char charType, unsigned char charCode)
 {
+    int type = (int) charType;
+    int code = (int) charCode;
+
     if (type == 0 && code == 0)
         return;
     if (type == 3) {
@@ -598,4 +602,5 @@ void errors(unsigned char type, unsigned char code)
     } else {
         cerr << "Ошибка. Тип: " << type << ", код: " << code;
     }
+    cerr << endl;
 }

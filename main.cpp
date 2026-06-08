@@ -49,8 +49,10 @@ struct icmpPacket
 struct packData
 {
     GUID recvedGuid;
-    time_point<high_resolution_clock> sendTime;
-    time_point<high_resolution_clock> recvTime;
+    time_point<high_resolution_clock> sendTime = {};
+    time_point<high_resolution_clock> recvTime = {};
+
+    bool sended = false;
 
     bool recved = false;
     bool timeout = false;
@@ -178,10 +180,6 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
     // Последний отправленный GUID
     GUID lastSendedGuid{};
 
-    GUID lastRecvedGuid{};
-
-    vector<bool> processed{};
-
     bool end = false;
     int i = 0;
 
@@ -193,8 +191,20 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             iterationSendDiff = high_resolution_clock::now() - guids[lastSendedGuid].sendTime;
         }
 
+        bool allSended = false;
+
+        if (guids.size() == (unsigned long long) steps) {
+            allSended = true;
+            for (auto &pair : guids) {
+                packData data = pair.second;
+                if (data.sended == false) {
+                    allSended = false;
+                }
+            }
+        }
+
         // Отправка GUID
-        if ((i == 0 || iterationSendDiff >= 1s) && i < steps) {
+        if ((i == 0 || iterationSendDiff >= 1s) && !allSended) {
             // Формирование GUID
             GUID origGuid;
             if (!(CoCreateGuid(&origGuid) == S_OK)) {
@@ -225,6 +235,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                 cerr << "Ошибка отправки: " << WSAGetLastError() << endl;
             } else {
                 cout << "Пакет отправлен." << endl;
+                guids[origGuid].sended = true;
             }
 
             guids[origGuid].sendTime = high_resolution_clock::now();
@@ -244,117 +255,81 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         // Длина адреса
         int addrLen = sizeof(destAddr);
 
-        optional<duration<double, milli>> recvWaitDiff;
+        // Структура fd_set для хранения сокетов
+        fd_set fdSet;
+        FD_ZERO(&fdSet);      // Очистка
+        FD_SET(sock, &fdSet); // Добавление сокета в набор
 
-        if (i != 0) {
-            // Разница между началом получения и текущей попыткой
-            recvWaitDiff = high_resolution_clock::now() - guids[lastRecvedGuid].recvTime;
+        // Таймаут функции select
+        timeval timeout;
+        timeout.tv_sec = 3;
+        timeout.tv_usec = 0;
+
+        // select
+        int selectRes = select(0, &fdSet, NULL, NULL, &timeout);
+
+        int bytesRecved = 0;
+
+        sockaddr_in fromAddr{};
+
+        // Ошибка select
+        if (selectRes <= 0) {
+            continue;
         }
 
-        auto recvStart = high_resolution_clock::now();
-
-        if (i == 0 || !recvWaitDiff.has_value() || recvWaitDiff >= 3s) {
-            // Структура fd_set для хранения сокетов
-            fd_set fdSet;
-            FD_ZERO(&fdSet);      // Очистка
-            FD_SET(sock, &fdSet); // Добавление сокета в набор
-
-            // Таймаут функции select
-            timeval timeout;
-            timeout.tv_sec = 3;
-            timeout.tv_usec = 0;
-
-            // select
-            int selectRes = select(0, &fdSet, NULL, NULL, &timeout);
-
-            int bytesRecved = 0;
-
-            sockaddr_in fromAddr{};
-
-            // Ошибка select
-            if (selectRes <= 0) {
-                continue;
-            }
-
-            // Сокет sock содержится в fdSet
-            if (FD_ISSET(sock, &fdSet)) {
-                int recvError = 0;
-                do {
-                    duration<double, milli> recvTimeout = high_resolution_clock::now() - recvStart;
-                    if (recvTimeout > 3s) {
-                        break;
+        // Сокет sock содержится в fdSet
+        if (FD_ISSET(sock, &fdSet)) {
+            int recvError = 0;
+            do {
+                bytesRecved = recvfrom(sock,       // сокет
+                                       recvBuffer, // указатель на буфер для приема данных
+                                       bufferSize, // размер буфера
+                                       0,          // флаги
+                                       (SOCKADDR *) &fromAddr, // указатель на адрес источника
+                                       &addrLen); // указатель на длину структуры адреса источника
+                if (bytesRecved == SOCKET_ERROR) {
+                    recvError = WSAGetLastError();
+                    if (recvError != WSAEWOULDBLOCK) {
+                        delete[] recvBuffer;
+                        cerr << "Возникла ошибка при получении :" << recvError;
+                        return 1;
+                    }
+                } else if (bytesRecved > 0) {
+                    // Проверка на то, что ответ пришел с целевого узла
+                    if (fromAddr.sin_addr.s_addr != destAddr.sin_addr.s_addr) {
+                        continue;
                     }
 
-                    bytesRecved = recvfrom(sock,       // сокет
-                                           recvBuffer, // указатель на буфер для приема данных
-                                           bufferSize, // размер буфера
-                                           0,          // флаги
-                                           (SOCKADDR *) &fromAddr, // указатель на адрес источника
-                                           &addrLen); // указатель на длину структуры адреса источника
-                    if (bytesRecved == SOCKET_ERROR) {
-                        recvError = WSAGetLastError();
-                        if (recvError != WSAEWOULDBLOCK) {
-                            delete[] recvBuffer;
-                            cerr << "Возникла ошибка при получении :" << recvError;
-                            return 1;
-                        }
-                    } else if (bytesRecved > 0) {
-                        // Проверка на то, что ответ пришел с целевого узла
-                        if (fromAddr.sin_addr.s_addr != destAddr.sin_addr.s_addr) {
-                            continue;
-                        }
+                    // Проверка что ответ содержит данные
+                    if (bytesRecved <= 0) {
+                        continue;
+                    }
 
-                        // Проверка что ответ содержит данные
-                        if (bytesRecved <= 0) {
-                            continue;
-                        }
+                    // Получение IP-заголовка из буфера
+                    ipHeader *ipHdr = (ipHeader *) recvBuffer;
 
-                        // Получение IP-заголовка из буфера
-                        ipHeader *ipHdr = (ipHeader *) recvBuffer;
+                    // Вычисление реальной длины IP-заголовка:
+                    // поле len обозначает длину IP-заголовка в 32 битных словах,
+                    // находим длину в байтах
+                    int ipHeaderLen = ipHdr->len * 4;
 
-                        // Вычисление реальной длины IP-заголовка:
-                        // поле len обозначает длину IP-заголовка в 32 битных словах,
-                        // находим длину в байтах
-                        int ipHeaderLen = ipHdr->len * 4;
+                    // Проверка по длине,
+                    // что полученный пакет содержит IP-заголовок
+                    // и ICMP заголовок
+                    if (bytesRecved < ipHeaderLen + (int) sizeof(icmpHeader)) {
+                        continue;
+                    }
 
-                        // Проверка по длине,
-                        // что полученный пакет содержит IP-заголовок
-                        // и ICMP заголовок
-                        if (bytesRecved < ipHeaderLen + (int) sizeof(icmpHeader)) {
-                            continue;
-                        }
+                    // Получение ICMP пакета
+                    icmpPacket *recvPack = (icmpPacket *) (recvBuffer + ipHeaderLen);
 
-                        // Получение ICMP пакета
-                        icmpPacket *recvPack = (icmpPacket *) (recvBuffer + ipHeaderLen);
-
-                        // Типы кроме 0 пропускаются
-                        if (recvPack->header.type != 0 && recvPack->header.code != 0) {
-                            // Формирование ICMP-сообщения об ошибке
-                            icmpPacket *errorPack = (icmpPacket *) (recvBuffer + ipHeaderLen + 8);
-
-                            // Получение GUID из полученного пакета
-                            GUID recvGuid = recvPack->data;
-
-                            // Итератор по map guids по значению полученного Guid
-                            auto it = guids.find(recvGuid);
-
-                            // Чужой пакет
-                            if (it == guids.end()) {
-                                continue;
-                            }
-
-                            // Вывод ошибок
-                            errors(errorPack->header.type, errorPack->header.code);
-
-                            processed.push_back(true);
-
-                            continue;
-                        }
+                    // Типы кроме 0 пропускаются
+                    if (recvPack->header.type != 0 && recvPack->header.code != 0) {
+                        // Формирование ICMP-сообщения об ошибке
+                        icmpPacket *errorPack = (icmpPacket *) (recvBuffer + ipHeaderLen + 8);
 
                         // Получение GUID из полученного пакета
                         GUID recvGuid = recvPack->data;
-
-                        lastRecvedGuid = recvGuid;
 
                         // Итератор по map guids по значению полученного Guid
                         auto it = guids.find(recvGuid);
@@ -364,40 +339,72 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                             continue;
                         }
 
-                        // Получение времени получения пакета
-                        it->second.recvTime = high_resolution_clock::now();
+                        guids[recvGuid].error = true;
 
-                        it->second.recved = true;
+                        // Вывод ошибок
+                        errors(errorPack->header.type, errorPack->header.code);
 
-                        // Вычисление промежутка времени между отправкой и получением пакета
-                        duration<double, milli> diff = it->second.recvTime - it->second.sendTime;
-
-                        // Получение TTL
-                        int ttl = ipHdr->ttl;
-
-                        cout << "Успешное получение (" << diff.count() << " мс, TTL = " << ttl
-                             << ")." << endl;
-
-                        processed.push_back(true);
-
-                        timeDiff.push_back(diff.count());
+                        continue;
                     }
-                } while (recvError != WSAEWOULDBLOCK);
-            }
+
+                    // Получение GUID из полученного пакета
+                    GUID recvGuid = recvPack->data;
+
+                    // Итератор по map guids по значению полученного Guid
+                    auto it = guids.find(recvGuid);
+
+                    // Чужой пакет
+                    if (it == guids.end()) {
+                        continue;
+                    }
+
+                    // Получение времени получения пакета
+                    it->second.recvTime = high_resolution_clock::now();
+
+                    it->second.recved = true;
+
+                    // Вычисление промежутка времени между отправкой и получением пакета
+                    duration<double, milli> diff = it->second.recvTime - it->second.sendTime;
+
+                    // Получение TTL
+                    int ttl = ipHdr->ttl;
+
+                    cout << "Успешное получение (" << diff.count() << " мс, TTL = " << ttl << ")."
+                         << endl;
+
+                    timeDiff.push_back(diff.count());
+                }
+            } while (recvError != WSAEWOULDBLOCK);
         }
 
-        // Обработка истечения таймаута
-        high_resolution_clock::duration recvDiff = high_resolution_clock::now() - recvStart;
-        if (recvDiff >= 3s) {
-            cerr << "Таймаут истек";
-            processed.push_back(false);
+        auto endTime = high_resolution_clock::now();
+
+        for (auto &pair : guids) {
+            packData data = pair.second;
+
+            if (!data.recved && !data.timeout && !data.error && data.sended) {
+                if (endTime - data.sendTime >= 3s || data.recvTime.time_since_epoch().count() == 0) {
+                    data.timeout = true;
+                    cerr << "Таймаут для пакета." << endl;
+                }
+            }
         }
 
         // Завершение цикла
-        if (processed.size() == (unsigned long long) steps) {
-            if (count(processed.begin(), processed.end(), true)) {
-                end = true;
+        bool allProcessed = true;
+
+        for (const auto &pair : guids) {
+            packData data = pair.second;
+
+            if (!data.recved && !data.timeout && !data.error) {
+                allProcessed = false;
+                break;
             }
+        }
+
+        // Все пакеты отправлены и все обработаны
+        if (guids.size() >= (unsigned long long) steps && allProcessed) {
+            end = true;
         }
 
         // Очистка памяти

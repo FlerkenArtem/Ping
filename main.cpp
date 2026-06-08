@@ -51,7 +51,10 @@ struct packData
     GUID recvedGuid;
     time_point<high_resolution_clock> sendTime;
     time_point<high_resolution_clock> recvTime;
+
     bool recved = false;
+    bool timeout = false;
+    bool error = false;
 };
 #pragma pack(pop)
 

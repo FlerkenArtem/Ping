@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <combaseapi.h>
 #include <iostream>
@@ -12,8 +13,9 @@
 using namespace std;
 using namespace std::chrono;
 
-/// Заголовок IP
 #pragma pack(push, 1)
+
+/// Заголовок IP
 struct ipHeader
 {
     unsigned char len : 4;
@@ -53,11 +55,19 @@ struct packData
     time_point<high_resolution_clock> recvTime = {};
 
     bool sended = false;
-
     bool recved = false;
     bool timeout = false;
     bool error = false;
 };
+
+struct icmpErrorPacket
+{
+    icmpHeader icmpHdr;
+    unsigned int restOfIcmp;
+    ipHeader origIpHdr;
+    unsigned char origData[8];
+};
+
 #pragma pack(pop)
 
 /// Подключение сокета
@@ -243,10 +253,15 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             lastSendedGuid = origGuid;
         }
 
+        // // Настройка TTL
+        // int ttl = 4;
+        // setsockopt(sock, IPPROTO_IP, IP_TTL, (const char *) &ttl, sizeof(ttl));
+
         // Минимальная длина IP-заголовка
         int ipHeaderMinLen = sizeof(ipHeader);
 
         // Установка размера буфера: IPv4-заголовок + ICMP-пакет
+        // const int bufferSize = 72;
         const int bufferSize = ipHeaderMinLen + sizeof(icmpPacket);
 
         // Создание буфера
@@ -291,7 +306,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                     recvError = WSAGetLastError();
                     if (recvError != WSAEWOULDBLOCK) {
                         delete[] recvBuffer;
-                        cerr << "Возникла ошибка при получении :" << recvError;
+                        cerr << "Возникла ошибка при получении: " << recvError << endl;
                         return 1;
                     }
                 } else if (bytesRecved > 0) {
@@ -326,23 +341,29 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                     // Типы кроме 0 пропускаются
                     if (recvPack->header.type != 0 && recvPack->header.code != 0) {
                         // Формирование ICMP-сообщения об ошибке
-                        icmpPacket *errorPack = (icmpPacket *) (recvBuffer + ipHeaderLen + 8);
+                        icmpErrorPacket *errorPack = (icmpErrorPacket *) recvBuffer;
 
-                        // Получение GUID из полученного пакета
-                        GUID recvGuid = recvPack->data;
+                        // Получение 8 байт данных
+                        array<unsigned char, 8> recvData;
+                        memcpy(recvData.data(), errorPack->origData, 8);
 
-                        // Итератор по map guids по значению полученного Guid
-                        auto it = guids.find(recvGuid);
+                        for (const auto &pair : guids) {
+                            GUID guid = pair.first;
 
-                        // Чужой пакет
-                        if (it == guids.end()) {
-                            continue;
+                            // От исходного GUID получается часть равная 8 байтам,
+                            // хранящимся в сообщении об ошибке
+                            array<unsigned char, 8> currentGuidPart;
+                            memcpy(currentGuidPart.data(), &pair.first, 8);
+
+                            // Если равны части GUID, считается что весь GUID равен
+                            if (currentGuidPart == recvData) {
+                                // Вывод ошибок
+                                errors(errorPack->icmpHdr.type, errorPack->icmpHdr.code);
+
+                                // Флаг ошибки при получении
+                                guids[guid].error = true;
+                            }
                         }
-
-                        guids[recvGuid].error = true;
-
-                        // Вывод ошибок
-                        errors(errorPack->header.type, errorPack->header.code);
 
                         continue;
                     }

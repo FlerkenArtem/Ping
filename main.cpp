@@ -341,11 +341,12 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                     // Типы кроме 0 пропускаются
                     if (recvPack->header.type != 0 && recvPack->header.code != 0) {
                         // Формирование ICMP-сообщения об ошибке
-                        icmpErrorPacket *errorPack = (icmpErrorPacket *) recvBuffer;
+                        icmpErrorPacket errorPack;
+                        memcpy(&errorPack, recvBuffer, sizeof(icmpErrorPacket));
 
                         // Получение 8 байт данных
                         array<unsigned char, 8> recvData;
-                        memcpy(recvData.data(), errorPack->origData, 8);
+                        memcpy(recvData.data(), errorPack.origData, 8);
 
                         for (const auto &pair : guids) {
                             GUID guid = pair.first;
@@ -358,10 +359,11 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                             // Если равны части GUID, считается что весь GUID равен
                             if (currentGuidPart == recvData) {
                                 // Вывод ошибок
-                                errors(errorPack->icmpHdr.type, errorPack->icmpHdr.code);
+                                errors(errorPack.icmpHdr.type, errorPack.icmpHdr.code);
 
                                 // Флаг ошибки при получении
                                 guids[guid].error = true;
+                                break;
                             }
                         }
 

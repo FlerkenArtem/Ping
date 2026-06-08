@@ -338,8 +338,9 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                     // Получение ICMP пакета
                     icmpPacket *recvPack = (icmpPacket *) (recvBuffer + ipHeaderLen);
 
-                    // Типы кроме 0 пропускаются
-                    if (recvPack->header.type != 0 && recvPack->header.code != 0) {
+                    // Типы и коды кроме 0, 0 пропускаются,
+                    // выполняется обработка ошибок
+                    if (recvPack->header.type != 0 || recvPack->header.code != 0) {
                         // Формирование ICMP-сообщения об ошибке
                         icmpErrorPacket errorPack;
                         memcpy(&errorPack, recvBuffer, sizeof(icmpErrorPacket));
@@ -366,7 +367,6 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                                 break;
                             }
                         }
-
                         continue;
                     }
 

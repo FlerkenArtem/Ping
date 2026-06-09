@@ -60,6 +60,7 @@ struct packData
     bool error = false;
 };
 
+/// Структура пакета ICMP с ошибкой
 struct icmpErrorPacket
 {
     icmpHeader icmpHdr;
@@ -253,8 +254,12 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             lastSendedGuid = origGuid;
         }
 
+        // ttl для отладки обработки ошибок
+        int ttl = 5;
+        setsockopt(sock, IPPROTO_IP, IP_TTL, (const char *) &ttl, sizeof(ttl));
+
         // Установка размера буфера: 56 байт
-        const int bufferSize = 56;
+        const int bufferSize = 1024;
 
         // Создание буфера
         char *recvBuffer = new char[bufferSize];
@@ -331,7 +336,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                     if (recvPack->header.type != 0 || recvPack->header.code != 0) {
                         // Формирование ICMP-сообщения об ошибке
                         icmpErrorPacket errorPack;
-                        memcpy(&errorPack, recvBuffer, sizeof(icmpErrorPacket));
+                        memcpy(&errorPack, recvBuffer + ipHeaderLen, sizeof(icmpErrorPacket));
 
                         // Получение 8 байт данных
                         array<unsigned char, 8> recvData;

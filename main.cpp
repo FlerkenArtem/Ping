@@ -105,6 +105,7 @@ int main()
         cerr << "Ошибка инициализации Winsock: " << wsaStartupResult << endl;
         return 1;
     }
+
     optional<sockaddr_in> destAddr = connectAddr();
     if (destAddr == nullopt) {
         cerr << "Ошибка подключения к адресу" << endl;
@@ -334,12 +335,12 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                         icmpErrorPacket errorPack;
                         memcpy(&errorPack, recvBuffer + ipHeaderLen, sizeof(icmpErrorPacket));
 
-                        // Получение 8 байт данных
+                        // Получение 4 байт данных
                         array<unsigned char, 4> recvData;
-                        memcpy(recvData.data(), errorPack.origData + 4, 4);
+                        memcpy(recvData.data(), errorPack.origData + sizeof(icmpHeader), 4);
 
                         for (auto &pair : guids) {
-                            // От исходного GUID получается часть равная 8 байтам,
+                            // От исходного GUID получается часть равная 4 байтам,
                             // хранящимся в сообщении об ошибке
                             array<unsigned char, 4> currentGuidPart;
                             memcpy(currentGuidPart.data(), &pair.first, 4);

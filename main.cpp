@@ -90,7 +90,7 @@ unsigned short calculateChecksum(unsigned short *buffer, int size);
 bool operator<(const GUID &guid1, const GUID &guid2);
 
 /// Обработка ошибок ICMP
-void errors(unsigned char type, unsigned char code);
+void errors(unsigned char charType, unsigned char charCode);
 
 int main()
 {    

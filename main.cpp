@@ -254,11 +254,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             lastSendedGuid = origGuid;
         }
 
-        // ttl для отладки обработки ошибок
-        int ttl = 5;
-        setsockopt(sock, IPPROTO_IP, IP_TTL, (const char *) &ttl, sizeof(ttl));
-
-        // Установка размера буфера: 56 байт
+        // Установка размера буфера
         const int bufferSize = 1024;
 
         // Создание буфера
@@ -339,17 +335,14 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                         memcpy(&errorPack, recvBuffer + ipHeaderLen, sizeof(icmpErrorPacket));
 
                         // Получение 8 байт данных
-                        array<unsigned char, 8> recvData;
-                        memcpy(recvData.data(), errorPack.origData, 8);
-                        errors(errorPack.icmpHdr.type, errorPack.icmpHdr.code);
+                        array<unsigned char, 4> recvData;
+                        memcpy(recvData.data(), errorPack.origData + 4, 4);
 
-                        for (const auto &pair : guids) {
-                            GUID guid = pair.first;
-
+                        for (auto &pair : guids) {
                             // От исходного GUID получается часть равная 8 байтам,
                             // хранящимся в сообщении об ошибке
-                            array<unsigned char, 8> currentGuidPart;
-                            memcpy(currentGuidPart.data(), &pair.first, 8);
+                            array<unsigned char, 4> currentGuidPart;
+                            memcpy(currentGuidPart.data(), &pair.first, 4);
 
                             // Если равны части GUID, считается что весь GUID равен
                             if (currentGuidPart == recvData) {
@@ -357,7 +350,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                                 errors(errorPack.icmpHdr.type, errorPack.icmpHdr.code);
 
                                 // Флаг ошибки при получении
-                                guids[guid].error = true;
+                                pair.second.error = true;
                                 break;
                             }
                         }

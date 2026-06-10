@@ -222,6 +222,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             if (!(CoCreateGuid(&origGuid) == S_OK)) {
                 cerr << "Ошибка генерации GUID";
                 closesocket(sock);
+                guids.clear();
                 return 1;
             }
 
@@ -303,6 +304,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                     if (recvError != WSAEWOULDBLOCK) {
                         delete[] recvBuffer;
                         cerr << "Возникла ошибка при получении: " << recvError << endl;
+                        guids.clear();
                         return 1;
                     }
                 } else if (bytesRecved > 0) {
@@ -437,6 +439,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
 
     // Закрытие сокета
     closesocket(sock);
+    guids.clear();
     return 0;
 }
 

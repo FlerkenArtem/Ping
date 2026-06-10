@@ -262,9 +262,6 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         // Создание буфера
         char *recvBuffer = new char[bufferSize];
 
-        // Длина адреса
-        int addrLen = sizeof(destAddr);
-
         // Структура fd_set для хранения сокетов
         fd_set fdSet;
         FD_ZERO(&fdSet);      // Очистка
@@ -292,6 +289,8 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         if (FD_ISSET(sock, &fdSet)) {
             int recvError = 0;
             do {
+                // Длина адреса
+                int addrLen = sizeof(fromAddr);
                 bytesRecved = recvfrom(sock,       // сокет
                                        recvBuffer, // указатель на буфер для приема данных
                                        bufferSize, // размер буфера

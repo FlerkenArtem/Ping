@@ -93,7 +93,7 @@ bool operator<(const GUID &guid1, const GUID &guid2);
 void errors(unsigned char charType, unsigned char charCode);
 
 int main()
-{    
+{
     system("chcp 65001 > nul");
     setlocale(LC_ALL, ".UTF8");
 
@@ -297,6 +297,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                                        0,          // флаги
                                        (SOCKADDR *) &fromAddr, // указатель на адрес источника
                                        &addrLen); // указатель на длину структуры адреса источника
+
                 if (bytesRecved == SOCKET_ERROR) {
                     recvError = WSAGetLastError();
                     if (recvError != WSAEWOULDBLOCK) {
@@ -320,8 +321,8 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
 
                     // Проверка по длине,
                     // что полученный пакет содержит IP-заголовок
-                    // и ICMP заголовок
-                    if (bytesRecved < ipHeaderLen + (int) sizeof(icmpHeader)) {
+                    // и ICMP-пакет
+                    if (bytesRecved < ipHeaderLen + (int) sizeof(icmpPacket)) {
                         continue;
                     }
 
@@ -331,6 +332,13 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                     // Типы и коды кроме 0, 0 пропускаются,
                     // выполняется обработка ошибок
                     if (recvPack->header.type != 0 || recvPack->header.code != 0) {
+                        // Проверка по длине,
+                        // что полученный пакет содержит IP-заголовок
+                        // и ICMP-пакет с сообщением об ошибке
+                        if (bytesRecved < ipHeaderLen + (int) sizeof(icmpErrorPacket)) {
+                            continue;
+                        }
+
                         // Формирование ICMP-сообщения об ошибке
                         icmpErrorPacket errorPack;
                         memcpy(&errorPack, recvBuffer + ipHeaderLen, sizeof(icmpErrorPacket));

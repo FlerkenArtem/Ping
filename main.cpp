@@ -51,8 +51,8 @@ struct icmpPacket
 struct packData
 {
     GUID recvedGuid;
-    time_point<high_resolution_clock> sendTime = {};
-    time_point<high_resolution_clock> recvTime = {};
+    time_point<steady_clock> sendTime = {};
+    time_point<steady_clock> recvTime = {};
 
     bool sended = false;
     bool recved = false;
@@ -198,9 +198,9 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
     // Цикл отправки и приема пакетов
     while (!end) {
         // Расчет времени между отправкой
-        high_resolution_clock::duration iterationSendDiff;
+        steady_clock::duration iterationSendDiff;
         if (i != 0) {
-            iterationSendDiff = high_resolution_clock::now() - guids[lastSendedGuid].sendTime;
+            iterationSendDiff = steady_clock::now() - guids[lastSendedGuid].sendTime;
         }
 
         bool allSended = false;
@@ -251,7 +251,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                 guids[origGuid].sended = true;
             }
 
-            guids[origGuid].sendTime = high_resolution_clock::now();
+            guids[origGuid].sendTime = steady_clock::now();
 
             lastSendedGuid = origGuid;
         }
@@ -379,7 +379,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                     }
 
                     // Получение времени получения пакета
-                    it->second.recvTime = high_resolution_clock::now();
+                    it->second.recvTime = steady_clock::now();
 
                     it->second.recved = true;
 
@@ -397,7 +397,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             } while (recvError != WSAEWOULDBLOCK);
         }
 
-        auto endTime = high_resolution_clock::now();
+        auto endTime = steady_clock::now();
 
         for (auto &pair : guids) {
             packData &data = pair.second;

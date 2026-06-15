@@ -224,6 +224,8 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                 closesocket(sock);
                 guids.clear();
                 return 1;
+            } else {
+                cout << "Сформирован GUID, размер: " << sizeof(origGuid) << " байт" << endl;
             }
 
             // Формирование пакета на отправку
@@ -234,6 +236,9 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             sendPack.data = origGuid;
             sendPack.header.checkSum = calculateChecksum((unsigned short *) &sendPack,
                                                          sizeof(sendPack));
+
+            // int ttl = 1;
+            // setsockopt(sock, IPPROTO_IP, IP_TTL, (const char *) &ttl, sizeof(ttl));
 
             // Отправка
             int res = sendto(sock,
@@ -248,6 +253,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                 cerr << "Ошибка отправки: " << WSAGetLastError() << endl;
             } else {
                 cout << "Пакет отправлен." << endl;
+                cout << "Отправлен GUID, размер: " << sizeof(sendPack.data) << " байт" << endl;
                 guids[origGuid].sended = true;
             }
 
@@ -260,7 +266,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         const int bufferSize = 1024;
 
         // Создание буфера
-        char *recvBuffer = new char[bufferSize];
+        vector<char> recvBuffer;
 
         // Структура fd_set для хранения сокетов
         fd_set fdSet;
@@ -281,7 +287,6 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
 
         // Ошибка select
         if (selectRes <= 0 && !allSended) {
-            delete[] recvBuffer;
             continue;
         }
 
@@ -291,17 +296,16 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             do {
                 // Длина адреса
                 int addrLen = sizeof(fromAddr);
-                bytesRecved = recvfrom(sock,       // сокет
-                                       recvBuffer, // указатель на буфер для приема данных
-                                       bufferSize, // размер буфера
-                                       0,          // флаги
+                bytesRecved = recvfrom(sock,              // сокет
+                                       recvBuffer.data(), // указатель на буфер для приема данных
+                                       bufferSize,        // размер буфера
+                                       0,                 // флаги
                                        (SOCKADDR *) &fromAddr, // указатель на адрес источника
                                        &addrLen); // указатель на длину структуры адреса источника
 
                 if (bytesRecved == SOCKET_ERROR) {
                     recvError = WSAGetLastError();
                     if (recvError != WSAEWOULDBLOCK) {
-                        delete[] recvBuffer;
                         cerr << "Возникла ошибка при получении: " << recvError << endl;
                         guids.clear();
                         return 1;
@@ -313,7 +317,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                     }
 
                     // Получение IP-заголовка из буфера
-                    ipHeader *ipHdr = (ipHeader *) recvBuffer;
+                    ipHeader *ipHdr = (ipHeader *) recvBuffer.data();
 
                     // Вычисление реальной длины IP-заголовка:
                     // поле len обозначает длину IP-заголовка в 32 битных словах,
@@ -328,7 +332,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                     }
 
                     // Получение ICMP пакета
-                    icmpPacket *recvPack = (icmpPacket *) (recvBuffer + ipHeaderLen);
+                    icmpPacket *recvPack = (icmpPacket *) (recvBuffer.data() + ipHeaderLen);
 
                     // Типы и коды кроме 0, 0 пропускаются,
                     // выполняется обработка ошибок
@@ -342,7 +346,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
 
                         // Формирование ICMP-сообщения об ошибке
                         icmpErrorPacket errorPack;
-                        memcpy(&errorPack, recvBuffer + ipHeaderLen, sizeof(icmpErrorPacket));
+                        memcpy(&errorPack, recvBuffer.data() + ipHeaderLen, sizeof(icmpErrorPacket));
 
                         // Получение 4 байт данных
                         array<unsigned char, 4> recvData;
@@ -369,6 +373,8 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
 
                     // Получение GUID из полученного пакета
                     GUID recvGuid = recvPack->data;
+
+                    cout << "Получен GUID, размер: " << sizeof(recvPack->data) << " байт" << endl;
 
                     // Итератор по map guids по значению полученного Guid
                     auto it = guids.find(recvGuid);
@@ -426,9 +432,6 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         if (guids.size() >= (unsigned long long) steps && allProcessed) {
             end = true;
         }
-
-        // Очистка памяти
-        delete[] recvBuffer;
 
         i++;
     }

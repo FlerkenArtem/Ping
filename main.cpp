@@ -66,7 +66,7 @@ struct icmpErrorPacket
     icmpHeader icmpHdr;
     unsigned int restOfIcmp;
     ipHeader origIpHdr;
-    unsigned char origData[8];
+    GUID origData;
 };
 
 #pragma pack(pop)
@@ -266,7 +266,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         const int bufferSize = 1024;
 
         // Создание буфера
-        vector<char> recvBuffer;
+        vector<char> recvBuffer(bufferSize);
 
         // Структура fd_set для хранения сокетов
         fd_set fdSet;
@@ -348,18 +348,13 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                         icmpErrorPacket errorPack;
                         memcpy(&errorPack, recvBuffer.data() + ipHeaderLen, sizeof(icmpErrorPacket));
 
-                        // Получение 4 байт данных
-                        array<unsigned char, 4> recvData;
-                        memcpy(recvData.data(), errorPack.origData + sizeof(icmpHeader), 4);
+                        // Получение GUID из сообщения
+                        GUID recvData = errorPack.origData;
 
                         for (auto &pair : guids) {
-                            // От исходного GUID получается часть равная 4 байтам,
-                            // хранящимся в сообщении об ошибке
-                            array<unsigned char, 4> currentGuidPart;
-                            memcpy(currentGuidPart.data(), &pair.first, 4);
+                            GUID currentGuid = pair.first;
 
-                            // Если равны части GUID, считается что весь GUID равен
-                            if (currentGuidPart == recvData) {
+                            if (currentGuid == recvData) {
                                 // Вывод ошибок
                                 errors(errorPack.icmpHdr.type, errorPack.icmpHdr.code);
 

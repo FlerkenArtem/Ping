@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <combaseapi.h>
 #include <iostream>
@@ -345,7 +346,8 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
 
                         // Формирование ICMP-сообщения об ошибке
                         icmpErrorPacket errorPack = *(icmpErrorPacket *) (recvBuffer.data()
-                                                                          + ipHeaderLen);
+                                                                          + ipHeaderLen + 4);
+                        // 4 байта - отступ, заложенный для id и sequence
 
                         // Получение GUID из сообщения
                         GUID recvData = errorPack.origData;
@@ -355,7 +357,7 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
 
                             if (currentGuid == recvData) {
                                 // Вывод ошибок
-                                errors(errorPack.icmpHdr.type, errorPack.icmpHdr.code);
+                                errors(recvPack->header.type, recvPack->header.code);
 
                                 // Флаг ошибки при получении
                                 pair.second.error = true;

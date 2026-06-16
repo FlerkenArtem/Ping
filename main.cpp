@@ -200,7 +200,9 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
         // Расчет времени между отправкой
         steady_clock::duration iterationSendDiff;
         if (i != 0) {
-            iterationSendDiff = steady_clock::now() - guids[lastSendedGuid].sendTime;
+            if (guids.count(lastSendedGuid) == 1) {
+                iterationSendDiff = steady_clock::now() - guids[lastSendedGuid].sendTime;
+            }
         }
 
         bool allSended = false;

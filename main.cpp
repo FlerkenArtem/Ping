@@ -224,8 +224,6 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                 closesocket(sock);
                 guids.clear();
                 return 1;
-            } else {
-                cout << "Сформирован GUID, размер: " << sizeof(origGuid) << " байт" << endl;
             }
 
             // Формирование пакета на отправку
@@ -236,9 +234,6 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
             sendPack.data = origGuid;
             sendPack.header.checkSum = calculateChecksum((unsigned short *) &sendPack,
                                                          sizeof(sendPack));
-
-            // int ttl = 1;
-            // setsockopt(sock, IPPROTO_IP, IP_TTL, (const char *) &ttl, sizeof(ttl));
 
             // Отправка
             int res = sendto(sock,
@@ -253,7 +248,6 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
                 cerr << "Ошибка отправки: " << WSAGetLastError() << endl;
             } else {
                 cout << "Пакет отправлен." << endl;
-                cout << "Отправлен GUID, размер: " << sizeof(sendPack.data) << " байт" << endl;
                 guids[origGuid].sended = true;
             }
 
@@ -369,8 +363,6 @@ unsigned long long ping(sockaddr_in destAddr, int steps)
 
                     // Получение GUID из полученного пакета
                     GUID recvGuid = recvPack->data;
-
-                    cout << "Получен GUID, размер: " << sizeof(recvPack->data) << " байт" << endl;
 
                     // Итератор по map guids по значению полученного Guid
                     auto it = guids.find(recvGuid);
